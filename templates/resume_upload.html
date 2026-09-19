@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Upload Your Resume - CareerAI{% endblock %}
+{% block content %}
+
+<nav class="navbar">
+    <a href="{{ url_for('landing') }}" class="logo">&#127891; CareerAI</a>
+</nav>
+
+<div class="auth-page">
+    <div class="auth-card">
+        <p class="step-label">Step 2 of 2</p>
+        <h1>Upload Your Resume</h1>
+        <p class="auth-sub">
+            This is required once &mdash; CareerAI reads your resume and builds your candidate
+            profile automatically. PDF or DOCX, up to 5MB.
+        </p>
+
+        <div class="dropzone" id="dropzone">
+            <p class="dropzone-icon">&#128228;</p>
+            <p class="dropzone-text">Drop your resume here, or click to browse</p>
+            <input type="file" id="resume-file" accept=".pdf,.docx" hidden>
+        </div>
+
+        <div id="upload-status" class="upload-status" hidden></div>
+        <div id="extracted-result" class="extracted-result" hidden></div>
+
+        <button id="continue-btn" class="btn btn-primary btn-block" style="margin-top:16px" disabled>
+            Continue to Home
+        </button>
+    </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/resume_upload.js') }}"></script>
+{% endblock %}

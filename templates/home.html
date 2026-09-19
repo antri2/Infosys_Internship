@@ -1,0 +1,171 @@
+{% extends "app_shell.html" %}
+{% block title %}Home - CareerAI{% endblock %}
+{% block app_content %}
+
+<div class="welcome-banner">
+    <div class="welcome-text">
+        <p class="greeting">Welcome back,</p>
+        <h1>{{ user_name }} </h1>
+        <p class="sub">Your career journey matters. Let's find the right opportunities and help you grow.</p>
+    </div>
+    <div class="welcome-quote">
+        "Small steps every day lead to big career goals."
+    </div>
+</div>
+
+{% if not resume_uploaded %}
+<div class="dash-card" style="display:flex;align-items:center;justify-content:space-between;gap:16px;border-left:4px solid var(--primary);margin-bottom:22px">
+    <div>
+        <p style="margin:0;font-weight:700;font-size:14px">Upload your resume to unlock personalized matches</p>
+        <p class="muted" style="margin:2px 0 0">We'll extract your skills and experience automatically — takes less than a minute.</p>
+    </div>
+    <a href="{{ url_for('resume.upload') }}" class="btn btn-primary" style="flex-shrink:0">Upload Resume</a>
+</div>
+{% endif %}
+
+<div class="stat-grid">
+    <div class="stat-card">
+        <span class="stat-icon"></span>
+        <div>
+            <div class="stat-value">{{ top_jobs | length }}</div>
+            <div class="stat-label">Recommended Opportunities</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <span class="stat-icon gold"></span>
+        <div>
+            <div class="stat-value">{{ applications_count }}</div>
+            <div class="stat-label">Applications</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <span class="stat-icon green"></span>
+        <div>
+            <div class="stat-value">{{ completeness }}%</div>
+            <div class="stat-label">Profile Completeness</div>
+        </div>
+    </div>
+</div>
+
+<div class="dash-grid">
+    <div class="dash-col">
+        <div class="dash-card">
+            <div class="dash-card-head">
+                <h3> Profile &amp; Resume Status</h3>
+            </div>
+            <div class="progress-ring-wrap">
+                <div class="progress-ring">
+                    <svg width="128" height="128" viewBox="0 0 128 128">
+                        <circle class="progress-ring-track" cx="64" cy="64" r="54"></circle>
+                        <circle class="progress-ring-value" cx="64" cy="64" r="54"
+                                stroke-dasharray="{{ 339.29 }}"
+                                stroke-dashoffset="{{ 339.29 * (1 - completeness / 100) }}"></circle>
+                    </svg>
+                    <div class="progress-ring-label">
+                        <span class="pct">{{ completeness }}%</span>
+                        <span class="cap">Complete</span>
+                    </div>
+                </div>
+                <div class="checklist">
+                    {% for item in checklist %}
+                    <div class="checklist-item {{ 'done' if item.done else 'pending' }}">
+                        <span class="name"><span class="dot">{{ '✓' if item.done else '○' }}</span> {{ item.name }}</span>
+                        <span class="status">{{ 'Completed' if item.done else 'Pending' }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <a href="{{ url_for('profile.view') }}" class="btn btn-outline btn-block" style="margin-top:18px">View / Update Profile</a>
+        </div>
+
+        <div class="dash-card">
+            <div class="dash-card-head">
+                <h3>🎤 Interview Preparation</h3>
+                <a href="{{ url_for('interview.view') }}">Start Now &rarr;</a>
+            </div>
+            <div class="quick-action-list">
+                <a href="{{ url_for('interview.view') }}" class="quick-action-item">
+                    <span class="quick-action-icon"></span>
+                    <div>
+                        <p class="title">Common Interview Questions</p>
+                        <p class="desc">Practice with role-specific questions</p>
+                    </div>
+                </a>
+                <a href="{{ url_for('interview.view') }}" class="quick-action-item">
+                    <span class="quick-action-icon"></span>
+                    <div>
+                        <p class="title">Coding Practice</p>
+                        <p class="desc">Improve your problem-solving skills</p>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="dash-col">
+        <div class="dash-card">
+            <div class="dash-card-head">
+                <h3> Recommended Opportunities</h3>
+                <a href="{{ url_for('opportunities.list_view') }}">View All &rarr;</a>
+            </div>
+            <div class="opportunity-list">
+                {% for job in top_jobs %}
+                <div class="opportunity-card">
+                    <div class="opportunity-row">
+                        <span class="company-badge">{{ job.company[0] | upper }}</span>
+                        <div class="opportunity-main">
+                            <p class="opportunity-title">{{ job.title }}</p>
+                            <p class="opportunity-company">{{ job.company }}</p>
+                            <p class="opportunity-meta">
+                                <span> {{ job.location }}</span>
+                                <span>{{ job.job_type }}</span>
+                            </p>
+                        </div>
+                        <span class="match-badge {{ 'mid' if job.match_percent < 70 else '' }} {{ 'low' if job.match_percent < 40 else '' }}">
+                            {{ job.match_percent }}% Match
+                        </span>
+                    </div>
+                </div>
+                {% else %}
+                <p class="muted">Complete your profile to see personalized recommendations.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="dash-card">
+            <div class="dash-card-head">
+                <h3> Applications Tracker</h3>
+                <a href="{{ url_for('applications.list_view') }}">View All &rarr;</a>
+            </div>
+            {% if recent_applications %}
+            <table class="app-table">
+                <thead>
+                    <tr><th>Job Title</th><th>Company</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                    {% for a in recent_applications %}
+                    <tr>
+                        <td>{{ a.title }}</td>
+                        <td>{{ a.company }}</td>
+                        <td><span class="status-badge {{ a.status }}">{{ a.status.replace('_', ' ') | title }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="muted">No applications yet. Browse Opportunities to get started.</p>
+            {% endif %}
+        </div>
+
+        <div class="dash-card">
+            <div class="dash-card-head">
+                <h3> Career Assistant</h3>
+                <a href="{{ url_for('assistant.view') }}">Chat Now &rarr;</a>
+            </div>
+            <p class="muted" style="margin:0 0 14px">Have questions about your career? Ask our AI assistant for guidance, resume tips, or job suggestions.</p>
+            <a href="{{ url_for('assistant.view') }}" class="btn btn-primary btn-block">Start Chat</a>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

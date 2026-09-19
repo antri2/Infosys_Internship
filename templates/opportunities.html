@@ -1,0 +1,108 @@
+{% extends "app_shell.html" %}
+{% block title %}Opportunities - CareerAI{% endblock %}
+{% block app_content %}
+
+<div class="page-head">
+    <h1>Opportunities</h1>
+    <p>
+        {% if search_query %}
+            Showing results for "{{ search_query }}"
+        {% elif has_skills %}
+            Ranked against the skills in your profile.
+        {% else %}
+            Complete your profile for personalized matches — showing general opportunities for now.
+        {% endif %}
+    </p>
+</div>
+
+<div class="dash-card">
+    <div class="opportunity-list">
+        {% for job in jobs %}
+        <div class="opportunity-card">
+            <div class="opportunity-row">
+                <span class="company-badge">{{ job.company[0] | upper }}</span>
+                <div class="opportunity-main">
+                    <p class="opportunity-title">{{ job.title }}</p>
+                    <p class="opportunity-company">{{ job.company }}</p>
+                    <p class="opportunity-meta">
+                        <span>📍 {{ job.location }}</span>
+                        <span>{{ job.job_type }}</span>
+                        {% if job.stipend_or_salary %}<span> {{ job.stipend_or_salary }}</span>{% endif %}
+                        {% if job.application_status %}
+                            <span class="status-badge {{ job.application_status }}">{{ job.application_status.replace('_', ' ') | title }}</span>
+                        {% endif %}
+                    </p>
+                </div>
+                <span class="match-badge {{ 'mid' if job.match_percent < 70 else '' }} {{ 'low' if job.match_percent < 40 else '' }}">
+                    {{ job.match_percent }}% Match
+                </span>
+                <button class="opportunity-toggle" onclick="toggleDetail('detail-{{ job.job_id }}')">View Details ▾</button>
+            </div>
+
+            <div class="opportunity-detail" id="detail-{{ job.job_id }}">
+                <h4>Description</h4>
+                <p>{{ job.description }}</p>
+
+                {% if job.responsibilities %}
+                <h4>Responsibilities</h4>
+                <p>{{ job.responsibilities }}</p>
+                {% endif %}
+
+                <div class="skill-gap-cols">
+                    <div>
+                        <h4> Skills you have</h4>
+                        <div class="skill-pill-row">
+                            {% for s in job.matched_skills %}<span class="skill-pill have">{{ s }}</span>{% endfor %}
+                            {% for s in job.matched_preferred %}<span class="skill-pill have">{{ s }}</span>{% endfor %}
+                            {% if not job.matched_skills and not job.matched_preferred %}<span class="muted" style="font-size:12.5px">None yet</span>{% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <h4> Skills to learn</h4>
+                        <div class="skill-pill-row">
+                            {% for s in job.missing_skills %}<span class="skill-pill missing">{{ s }}</span>{% endfor %}
+                            {% if not job.missing_skills %}<span class="muted" style="font-size:12.5px">You meet all required skills 🎉</span>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <h4>Qualifications</h4>
+                <p>{{ job.qualifications }} &middot; Experience: {{ job.experience_required }}</p>
+
+                <div class="opportunity-actions">
+                    <button class="btn btn-outline" onclick="trackApplication({{ job.job_id }}, 'save', this)">
+                        {{ 'Saved ✓' if job.application_status == 'saved' else 'Save' }}
+                    </button>
+                    <button class="btn btn-primary" onclick="trackApplication({{ job.job_id }}, 'apply', this)">
+                        {{ 'Applied ✓' if job.application_status in ('applied','interview','under_review') else 'Apply' }}
+                    </button>
+                    {% if job.apply_link %}
+                    
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <p class="muted">No opportunities found. Try a different search, or check back after the dataset/index is built.</p>
+        {% endfor %}
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleDetail(id) {
+    document.getElementById(id).classList.toggle('open');
+}
+
+function trackApplication(jobId, action, btn) {
+    fetch(`/applications/${jobId}/${action}`, { method: 'POST' })
+        .then(res => res.json())
+        .then(() => {
+            btn.textContent = action === 'save' ? 'Saved ✓' : 'Applied ✓';
+        })
+        .catch(() => alert('Something went wrong. Please try again.'));
+}
+</script>
+{% endblock %}

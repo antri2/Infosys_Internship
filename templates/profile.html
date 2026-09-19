@@ -1,0 +1,95 @@
+{% extends "app_shell.html" %}
+{% block title %}My Profile - CareerAI{% endblock %}
+{% block app_content %}
+
+<div class="profile-header">
+    <span class="profile-avatar-lg">{{ (user.name or 'U')[0] | upper }}</span>
+    <div>
+        <h2>{{ user.name }}</h2>
+        <p>{{ user.email }}{% if user.phone %} &middot; {{ user.phone }}{% endif %} &middot; {{ user.career_status }}</p>
+    </div>
+</div>
+
+<div class="dash-grid">
+    <div class="dash-col">
+        <div class="dash-card">
+            <div class="dash-card-head"><h3>Edit Your Details</h3></div>
+            <form method="POST" action="{{ url_for('profile.edit') }}" class="profile-form" style="border:none;padding:0">
+                <div class="form-grid">
+                    <div>
+                        <label for="college">College Name</label>
+                        <input type="text" id="college" name="college" value="{{ profile.college or '' }}">
+                    </div>
+                    <div>
+                        <label for="degree">Degree / Course</label>
+                        <input type="text" id="degree" name="degree" value="{{ profile.degree or '' }}">
+                    </div>
+                    <div>
+                        <label for="passing_year">Passing Year</label>
+                        <input type="number" id="passing_year" name="passing_year" value="{{ profile.passing_year or '' }}">
+                    </div>
+                    <div>
+                        <label for="cgpa">CGPA</label>
+                        <input type="number" step="0.01" id="cgpa" name="cgpa" value="{{ profile.cgpa or '' }}">
+                    </div>
+                </div>
+
+                <label for="skills">Key Skills (comma separated)</label>
+                <input type="text" id="skills" name="skills"
+                       value="{{ profile.skills | map(attribute='name') | join(', ') }}">
+
+                <label for="experience">Experience / Projects</label>
+                <textarea id="experience" name="experience" rows="4">{{ profile.experience or '' }}</textarea>
+
+                <button type="submit" class="btn btn-primary" style="margin-top:16px">Save Changes</button>
+            </form>
+        </div>
+
+        <div class="dash-card">
+            <div class="dash-card-head"><h3> Education (from resume)</h3></div>
+            {% if profile.education %}
+                {% for e in profile.education %}
+                    <p style="font-size:13.5px;margin:0 0 8px">
+                        <b>{{ e.degree }}</b> &mdash; {{ e.institution }} ({{ e.start_date }} - {{ e.end_date }})
+                    </p>
+                {% endfor %}
+            {% else %}<p class="muted">Not extracted yet.</p>{% endif %}
+        </div>
+
+        <div class="dash-card">
+            <div class="dash-card-head"><h3> Experience (from resume)</h3></div>
+            {% if profile.experience_list %}
+                {% for x in profile.experience_list %}
+                    <p style="font-size:13.5px;margin:0 0 8px">
+                        <b>{{ x.title }}</b> &mdash; {{ x.organization }} ({{ x.start_date }} - {{ x.end_date }})
+                    </p>
+                {% endfor %}
+            {% else %}<p class="muted">Not extracted yet.</p>{% endif %}
+        </div>
+    </div>
+
+    <div class="dash-col">
+        <div class="dash-card">
+            <div class="dash-card-head"><h3> Resume</h3></div>
+            <div class="resume-replace-box">
+                <div style="font-size:26px">📎</div>
+                <p><b>Uploading a new resume replaces your current one</b><br>
+                   Your skills, education, and experience will be re-extracted automatically.</p>
+                <a href="{{ url_for('resume.upload') }}" class="btn btn-outline" style="margin-top:10px">Upload New Resume</a>
+            </div>
+        </div>
+
+        <div class="dash-card">
+            <div class="dash-card-head"><h3> Quick Tips to Improve Your Profile</h3></div>
+            <div class="tip-list">
+                <div class="tip-item"><span class="tip-icon"></span> Keep your skills list specific — "React" and "Node.js" match better than "Web Development".</div>
+                <div class="tip-item"><span class="tip-icon"></span> Add measurable outcomes to your experience (e.g. "reduced load time by 30%").</div>
+                <div class="tip-item"><span class="tip-icon"></span> Re-upload your resume whenever you finish a new project or certification.</div>
+                <div class="tip-item"><span class="tip-icon"></span> Fill in your CGPA and passing year — many internship filters check for these.</div>
+                <div class="tip-item"><span class="tip-icon"></span> A complete profile (100%) shows up higher in recruiter searches.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

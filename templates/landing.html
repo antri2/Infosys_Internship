@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}CareerAI - Your AI-Powered Career Companion{% endblock %}
+{% block content %}
+
+<nav class="navbar">
+    <button class="hamburger" id="hamburger" aria-label="Menu">&#9776;</button>
+    <a href="{{ url_for('landing') }}" class="logo">&#127891; CareerAI</a>
+    <div class="nav-auth">
+        <a href="{{ url_for('auth.login') }}" class="btn btn-outline">Login</a>
+        <a href="{{ url_for('auth.register') }}" class="btn btn-primary">Register</a>
+    </div>
+</nav>
+
+<section class="hero">
+    <div class="hero-text">
+        <p class="eyebrow">Your AI-Powered Career Companion</p>
+        <h1>Get Your <span class="accent">Dream Job</span> and <span class="accent">Internship</span> from Here</h1>
+        <p class="hero-sub">
+            Discover personalized opportunities, build your skills, create professional
+            resumes and cover letters, and get ready for your next big step &mdash; all in one place.
+        </p>
+        <div class="hero-actions">
+            <a href="{{ url_for('auth.register') }}" class="btn btn-primary btn-lg">Get Started &rarr;</a>
+            <a href="{{ url_for('auth.register') }}" class="btn btn-outline btn-lg">Register</a>
+        </div>
+    </div>
+    <div class="hero-art">
+        <div class="hero-illustration" aria-hidden="true">&#128187;</div>
+        <div class="floating-card floating-card-1">&#10024; Better Skills, Brighter Future</div>
+        <div class="floating-pill floating-pill-1">&#128188; Find Jobs</div>
+        <div class="floating-pill floating-pill-2">&#128196; Build Resume</div>
+        <div class="floating-pill floating-pill-3">&#127891; Prepare Interviews</div>
+        <div class="floating-pill floating-pill-4">&#129302; Get AI Support</div>
+    </div>
+</section>
+
+<section class="features">
+    <p class="eyebrow center">Why Choose CareerAI</p>
+    <h2 class="center">Everything You Need for a Successful Career</h2>
+    <p class="section-sub center">
+        From finding the right opportunities to preparing for interviews, we're here
+        to support you at every step of your journey.
+    </p>
+
+    <div class="feature-grid">
+        <div class="feature-card">
+            <div class="feature-icon">&#128269;</div>
+            <h3>Personalized Job Recommendations</h3>
+            <p>Get internship and job suggestions based on your skills, interests, and career goals.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">&#128196;</div>
+            <h3>Smart Resume &amp; Cover Letter Builder</h3>
+            <p>Create professional resumes and tailored cover letters for each opportunity.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">&#127891;</div>
+            <h3>Interview Preparation</h3>
+            <p>Practice with AI-powered questions, get feedback, and build confidence.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">&#129302;</div>
+            <h3>AI Career Assistant</h3>
+            <p>Get instant guidance, career tips, and answers to your queries, anytime.</p>
+        </div>
+    </div>
+</section>
+
+<footer class="site-footer">
+    <div class="footer-grid">
+        <div>
+            <p class="footer-logo">&#127891; CareerAI</p>
+            <p>Your smart companion for better opportunities, stronger skills, and a brighter future.</p>
+        </div>
+        <div>
+            <p class="footer-heading">Quick Links</p>
+            <a href="{{ url_for('landing') }}">Home</a>
+            <a href="{{ url_for('auth.login') }}">Login</a>
+            <a href="{{ url_for('auth.register') }}">Register</a>
+        </div>
+        <div>
+            <p class="footer-heading">Support</p>
+            <a href="#">Help Center</a>
+            <a href="#">FAQs</a>
+            <a href="#">Privacy Policy</a>
+        </div>
+    </div>
+    <p class="footer-copy">&copy; 2026 CareerAI. All rights reserved.</p>
+</footer>
+
+{% endblock %}

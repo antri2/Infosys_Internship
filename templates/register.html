@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Create Your Account - CareerAI{% endblock %}
+{% block content %}
+
+<nav class="navbar">
+    <a href="{{ url_for('landing') }}" class="logo">&#127891; CareerAI</a>
+</nav>
+
+<div class="auth-page">
+    <div class="auth-card">
+        <h1>Create Your Account</h1>
+        <p class="auth-sub">Start your career journey with CareerAI.</p>
+
+        <form method="POST" action="{{ url_for('auth.register') }}">
+            <label for="name">Name</label>
+            <input type="text" id="name" name="name" required autocomplete="name">
+
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" required autocomplete="email">
+
+            <label for="phone">Phone Number</label>
+            <input type="tel" id="phone" name="phone" autocomplete="tel">
+
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" required minlength="6" autocomplete="new-password">
+
+            <label for="confirm_password">Confirm Password</label>
+            <input type="password" id="confirm_password" name="confirm_password" required minlength="6" autocomplete="new-password">
+
+            <label>I am:</label>
+            <div class="radio-row">
+                <label class="radio-option"><input type="radio" name="career_status" value="Fresher" checked> Fresher</label>
+                <label class="radio-option"><input type="radio" name="career_status" value="Experienced"> Experienced</label>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block">Register</button>
+        </form>
+
+        <p class="auth-switch">Already have an account? <a href="{{ url_for('auth.login') }}">Login here</a></p>
+    </div>
+</div>
+
+{% endblock %}

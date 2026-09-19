@@ -1,0 +1,27 @@
+{% extends "app_shell.html" %}
+{% block title %}Career Assistant - CareerAI{% endblock %}
+{% block app_content %}
+
+<div class="page-head">
+    <h1>Career Assistant <span class="coming-soon-badge"></span></h1>
+    <p>Ask about resume tips, interview prep, or job suggestions.</p>
+</div>
+
+<div class="chat-shell">
+    <div class="chat-messages">
+        <div class="chat-bubble bot">
+            Hi! I'm your Career Assistant. I'll soon be able to answer questions about your resume, suggest
+            jobs based on your skills, and help you prepare for interviews.
+        </div>
+        <div class="chat-bubble user">Can you review my resume?</div>
+        <div class="chat-bubble bot">
+            
+        </div>
+    </div>
+    <div class="chat-input-row">
+        <input type="text" placeholder="Chat functionality coming soon..." disabled>
+        <button class="btn btn-primary" disabled>Send</button>
+    </div>
+</div>
+
+{% endblock %}

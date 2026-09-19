@@ -1,0 +1,24 @@
+{% extends "app_shell.html" %}
+{% block title %}Interview Preparation - CareerAI{% endblock %}
+{% block app_content %}
+
+<div class="page-head">
+    <h1>Interview Preparation</h1>
+    <p>Practice common questions across categories to walk into your next interview ready.</p>
+</div>
+
+<div class="interview-grid">
+    {% for category in categories %}
+    <div class="dash-card">
+        <div class="dash-card-head"><h3>{{ category.icon }} {{ category.name }}</h3></div>
+        {% for question, answer in category.questions %}
+        <div class="interview-q">
+            <p class="q">{{ question }}</p>
+            <p class="a">{{ answer }}</p>
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+</div>
+
+{% endblock %}

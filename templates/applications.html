@@ -1,0 +1,42 @@
+{% extends "app_shell.html" %}
+{% block title %}My Applications - CareerAI{% endblock %}
+{% block app_content %}
+
+<div class="page-head">
+    <h1>My Applications</h1>
+    <p>Track everything you've saved or applied...</p>
+</div>
+
+<div class="filter-tabs">
+    <a href="{{ url_for('applications.list_view', status='all') }}" class="filter-tab {{ 'active' if status_filter == 'all' }}">All</a>
+    <a href="{{ url_for('applications.list_view', status='saved') }}" class="filter-tab {{ 'active' if status_filter == 'saved' }}">Saved</a>
+    <a href="{{ url_for('applications.list_view', status='applied') }}" class="filter-tab {{ 'active' if status_filter == 'applied' }}">Applied</a>
+    <a href="{{ url_for('applications.list_view', status='interview') }}" class="filter-tab {{ 'active' if status_filter == 'interview' }}">Interview</a>
+    <a href="{{ url_for('applications.list_view', status='under_review') }}" class="filter-tab {{ 'active' if status_filter == 'under_review' }}">Under Review</a>
+    <a href="{{ url_for('applications.list_view', status='rejected') }}" class="filter-tab {{ 'active' if status_filter == 'rejected' }}">Rejected</a>
+</div>
+
+<div class="dash-card">
+    {% if applications %}
+    <table class="app-table">
+        <thead>
+            <tr><th>Job Title</th><th>Company</th><th>Location</th><th>Status</th><th>Updated</th></tr>
+        </thead>
+        <tbody>
+            {% for a in applications %}
+            <tr>
+                <td>{{ a.title }}</td>
+                <td>{{ a.company }}</td>
+                <td>{{ a.location }}</td>
+                <td><span class="status-badge {{ a.status }}">{{ a.status.replace('_', ' ') | title }}</span></td>
+                <td>{{ a.applied_on.strftime('%b %d, %Y') if a.applied_on else '' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Nothing here yet. Head over to <a href="{{ url_for('opportunities.list_view') }}">Opportunities</a> to save or apply to a role.</p>
+    {% endif %}
+</div>
+
+{% endblock %}
