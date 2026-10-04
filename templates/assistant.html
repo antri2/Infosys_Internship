@@ -2,26 +2,260 @@
 {% block title %}Career Assistant - CareerAI{% endblock %}
 {% block app_content %}
 
-<div class="page-head">
-    <h1>Career Assistant <span class="coming-soon-badge"></span></h1>
-    <p>Ask about resume tips, interview prep, or job suggestions.</p>
+<div class="assistant-page">
+    <header class="assistant-header">
+        <div class="assistant-heading">
+            <div class="assistant-mark" aria-hidden="true">✦</div>
+            <div>
+                <p class="assistant-eyebrow">Your career workspace</p>
+                <h1>Career Assistant</h1>
+                <p class="assistant-subtitle">Ask about your verified profile, target roles, skills, resume, and interview preparation.</p>
+            </div>
+        </div>
+        <button type="button" class="btn btn-outline assistant-new-chat" id="assistant-reset">New Chat</button>
+    </header>
+
+    <div class="assistant-context-bar" id="assistant-context-bar">
+        <span class="assistant-context-dot" aria-hidden="true"></span>
+        <span id="assistant-context-indicator">
+            {% if selected_job_id %}
+                Selected synchronized job context is active.
+            {% elif pasted_jd %}
+                Pasted job description context is active.
+            {% elif target_role %}
+                Target role: {{ target_role }}.
+            {% else %}
+                No selected job is active; I can still give profile-based general guidance.
+            {% endif %}
+        </span>
+    </div>
+    <p id="assistant-status" class="assistant-status" aria-live="polite" hidden></p>
+    {% if error %}<div class="flash-banner assistant-error"><p>{{ error }}</p></div>{% endif %}
+
+    <section class="chat-shell assistant-chat-shell" aria-label="Career Assistant conversation">
+        <div class="chat-messages" id="assistant-messages" aria-live="polite" aria-label="Conversation messages">
+            {% if messages %}
+                {% for item in messages %}
+                <div class="chat-bubble {{ 'user' if item.role == 'user' else 'assistant' }}"
+                     {% if item.role != 'user' %}data-markdown-source="{{ item.content }}"{% endif %}>
+                    {{ item.content }}
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="chat-bubble assistant welcome-message">
+                    Hi! I’m your grounded CareerAI assistant. I can help you understand your profile, compare opportunities, build a learning roadmap, improve your resume, and prepare for interviews. I’ll use verified context and tell you when more information is needed.
+                </div>
+            {% endif %}
+            <div class="chat-bubble assistant typing-bubble" id="assistant-typing" hidden aria-label="Career Assistant is typing">
+                <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
+            </div>
+        </div>
+
+        <div class="assistant-starters" id="assistant-starters" {% if messages %}hidden{% endif %}>
+            <div class="assistant-starters-heading">
+                <h2>What would you like to work on?</h2>
+                <p>Start with a question. I’ll keep the advice grounded in your CareerAI profile.</p>
+            </div>
+            <h3 class="assistant-starters-title">Starter Questions</h3>
+            <div class="assistant-starter-grid">
+                <button type="button" class="assistant-starter" data-question="I want to become an AI Engineer. What should I learn next?">
+                    <span class="starter-icon">↗</span><span><strong>AI Engineer learning path</strong><small>Find the next skills to build</small></span>
+                </button>
+                <button type="button" class="assistant-starter" data-question="Am I suitable for the selected job?">
+                    <span class="starter-icon">⌁</span><span><strong>Selected job fit</strong><small>Understand your verified match</small></span>
+                </button>
+                <button type="button" class="assistant-starter" data-question="What should I improve in my resume?">
+                    <span class="starter-icon">▤</span><span><strong>Resume guidance</strong><small>Make your evidence easier to find</small></span>
+                </button>
+                <button type="button" class="assistant-starter" data-question="Help me prepare for an interview.">
+                    <span class="starter-icon">◉</span><span><strong>Interview preparation</strong><small>Practice with your saved context</small></span>
+                </button>
+                <button type="button" class="assistant-starter" data-question="What projects should I build for an AI Engineer role?">
+                    <span class="starter-icon">✧</span><span><strong>Project ideas</strong><small>Choose a practical next build</small></span>
+                </button>
+            </div>
+        </div>
+
+        <form class="assistant-composer" id="assistant-form">
+            <label class="sr-only" for="assistant-question">Ask the Career Assistant</label>
+            <textarea id="assistant-question" name="question" rows="3" maxlength="4000"
+                      placeholder="Ask about your career, skills, job fit, resume, or interview…"></textarea>
+            <div class="assistant-composer-footer">
+                <span class="assistant-composer-hint">Enter to send · Shift+Enter for a new line</span>
+                <button class="btn btn-primary assistant-send" id="assistant-send" type="submit">Send <span aria-hidden="true">↑</span></button>
+            </div>
+        </form>
+    </section>
 </div>
 
-<div class="chat-shell">
-    <div class="chat-messages">
-        <div class="chat-bubble bot">
-            Hi! I'm your Career Assistant. I'll soon be able to answer questions about your resume, suggest
-            jobs based on your skills, and help you prepare for interviews.
-        </div>
-        <div class="chat-bubble user">Can you review my resume?</div>
-        <div class="chat-bubble bot">
-            
-        </div>
-    </div>
-    <div class="chat-input-row">
-        <input type="text" placeholder="Chat functionality coming soon..." disabled>
-        <button class="btn btn-primary" disabled>Send</button>
-    </div>
-</div>
+{% endblock %}
 
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/assistant_rendering.js') }}"></script>
+<script>
+(function () {
+    const form = document.getElementById('assistant-form');
+    const messages = document.getElementById('assistant-messages');
+    const question = document.getElementById('assistant-question');
+    const send = document.getElementById('assistant-send');
+    const reset = document.getElementById('assistant-reset');
+    const status = document.getElementById('assistant-status');
+    const starters = document.getElementById('assistant-starters');
+    const typing = document.getElementById('assistant-typing');
+    const contextIndicator = document.getElementById('assistant-context-indicator');
+    let sessionId = {{ session_id|tojson }};
+    let initialJobId = {{ (selected_job_id or '')|tojson }};
+    let initialTargetRole = {{ (target_role or '')|tojson }};
+    let initialPastedJd = {{ (pasted_jd or '')|tojson }};
+    const url = '{{ url_for("assistant.message") }}';
+    const resetUrl = '{{ url_for("assistant.reset") }}';
+    const assistantRendering = window.CareerAssistantRendering;
+
+    function scrollToLatest() {
+        messages.scrollTop = messages.scrollHeight;
+    }
+
+    function addMessage(role, content) {
+        const bubble = document.createElement('div');
+        bubble.className = `chat-bubble ${role === 'user' ? 'user' : 'assistant'}`;
+        if (role === 'assistant') bubble.classList.add('assistant-markdown');
+        if (role === 'assistant' && assistantRendering) {
+            const answer = assistantRendering.normalizeResponse(content);
+            assistantRendering.renderMarkdown(bubble, answer);
+        } else {
+            const fallbackText = content && typeof content === 'object'
+                ? (content.answer || content.response || '')
+                : content;
+            bubble.textContent = String(fallbackText === null || fallbackText === undefined ? '' : fallbackText);
+        }
+        messages.appendChild(bubble);
+        scrollToLatest();
+    }
+
+    function showStatus(message) {
+        status.hidden = !message;
+        status.textContent = message || '';
+    }
+
+    function setBusy(busy) {
+        send.disabled = busy;
+        reset.disabled = busy;
+        question.disabled = busy;
+        document.querySelectorAll('.assistant-starter').forEach(button => { button.disabled = busy; });
+        typing.hidden = !busy;
+        if (busy) scrollToLatest();
+    }
+
+    function updateContext(data) {
+        const context = data.context || {};
+        if (context.job_id) {
+            contextIndicator.textContent = 'Selected synchronized job context is active.';
+        } else if (context.target_role) {
+            contextIndicator.textContent = `Target role: ${context.target_role}.`;
+        } else if (context.mode === 'pasted_jd') {
+            contextIndicator.textContent = 'Pasted job description context is active.';
+        } else {
+            contextIndicator.textContent = 'No selected job is active; I can still give profile-based general guidance.';
+        }
+    }
+
+    async function sendQuestion(text) {
+        if (send.disabled) return;
+        const value = String(text || '').trim();
+        if (!value) {
+            showStatus('Type a question first.');
+            question.focus();
+            return;
+        }
+        starters.hidden = true;
+        addMessage('user', value);
+        question.value = '';
+        showStatus('Career Assistant is thinking…');
+        setBusy(true);
+        try {
+            const response = await fetch(url, {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: value,
+                    session_id: sessionId,
+                    job_id: initialJobId || null,
+                    target_role: initialTargetRole || '',
+                    pasted_jd: initialPastedJd || ''
+                })
+            });
+            const data = await response.json();
+            if (!response.ok || !data.success) throw new Error(data.error || 'The assistant could not answer that question.');
+            sessionId = data.session_id;
+            const returnedContext = data.context || {};
+            initialJobId = returnedContext.job_id || initialJobId;
+            initialTargetRole = returnedContext.target_role || initialTargetRole;
+            addMessage('assistant', data);
+            showStatus('');
+            updateContext(data);
+        } catch (error) {
+            showStatus(error.message || 'The assistant could not answer that question.');
+        } finally {
+            setBusy(false);
+            question.focus();
+        }
+    }
+
+    form.addEventListener('submit', event => {
+        event.preventDefault();
+        sendQuestion(question.value);
+    });
+
+    document.querySelectorAll('.assistant-starter').forEach(button => {
+        button.addEventListener('click', () => sendQuestion(button.dataset.question));
+    });
+
+    reset.addEventListener('click', async () => {
+        setBusy(true);
+        showStatus('Starting a new conversation…');
+        try {
+            const response = await fetch(resetUrl, {
+                method: 'POST', credentials: 'same-origin', headers: { 'Accept': 'application/json' }
+            });
+            const data = await response.json();
+            if (!response.ok || !data.success) throw new Error(data.error || 'Could not start a new conversation.');
+            sessionId = data.session_id;
+            initialJobId = null;
+            initialTargetRole = '';
+            initialPastedJd = '';
+            messages.querySelectorAll('.chat-bubble:not(.typing-bubble)').forEach(bubble => bubble.remove());
+            addMessage('assistant', 'New conversation started. Ask about a target role, selected job, skill gap, resume, or interview preparation.');
+            starters.hidden = false;
+            updateContext(data);
+            showStatus('New conversation started.');
+        } catch (error) {
+            showStatus(error.message || 'Could not start a new conversation.');
+        } finally {
+            setBusy(false);
+            question.focus();
+        }
+    });
+
+    question.addEventListener('keydown', event => {
+        if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+            event.preventDefault();
+            sendQuestion(question.value);
+        }
+    });
+
+    question.addEventListener('input', () => {
+        if (!question.value.trim()) showStatus('');
+    });
+    document.querySelectorAll('.chat-bubble.assistant[data-markdown-source]').forEach(bubble => {
+        bubble.classList.add('assistant-markdown');
+        if (assistantRendering) {
+            assistantRendering.renderMarkdown(
+                bubble,
+                assistantRendering.normalizeResponse(bubble.dataset.markdownSource)
+            );
+        }
+    });
+    scrollToLatest();
+}());
+</script>
 {% endblock %}

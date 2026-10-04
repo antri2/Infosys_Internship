@@ -1,0 +1,282 @@
+{% extends "app_shell.html" %}
+{% block title %}Cover Letter - CareerAI{% endblock %}
+{% block app_content %}
+
+<div class="page-head">
+    <h1>Cover Letter</h1>
+    <p>Create a professional, editable cover letter. It is generic by default; add any target details you want the letter to use.</p>
+</div>
+
+<div class="dash-card">
+    <div class="dash-card-head"><h3>Build Your Cover Letter</h3></div>
+    <form id="cover-letter-form">
+        <input type="hidden" name="generic" value="true">
+        <label for="target-role"><strong>Target Role (optional)</strong></label>
+        <select id="target-role" name="target_role" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;">
+            <option value="" {% if not selected_role %}selected{% endif %}>Generic letter (no selected role)</option>
+            {% for role in role_options %}
+            <option value="{{ role }}" {% if selected_role == role %}selected{% endif %}>{{ role }}</option>
+            {% endfor %}
+            {% if selected_role and selected_role not in role_options %}
+            <option value="{{ selected_role }}" selected>{{ selected_role }}</option>
+            {% endif %}
+        </select>
+        <label for="cover-letter-details" style="display:block;margin-top:14px;"><strong>Custom Details (optional)</strong></label>
+        <textarea id="cover-letter-details" name="extra_context" rows="8" maxlength="5000"
+                  placeholder="Company name:&#10;Specific role:&#10;Job description:&#10;Required skills:&#10;Project or internship details:&#10;Any other context:"
+                  style="width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;line-height:1.55;">{% if selected_letter %}{{ selected_letter.custom_details or '' }}{% endif %}</textarea>
+        <p class="muted" style="margin:9px 0 0;">No specific job is selected by default. Choose a role when you want a representative target, or keep the generic option and add details below.</p>
+        <div class="opportunity-actions" style="margin-top:16px;">
+            <button type="submit" class="btn btn-primary" id="generate-cover-letter">Generate Cover Letter</button>
+        </div>
+    </form>
+    <p id="cover-letter-status" class="muted" aria-live="polite" style="margin-top:14px;" hidden></p>
+    {% if error %}<div class="flash-banner" style="margin-top:14px;"><p>{{ error }}</p></div>{% endif %}
+</div>
+
+{% if selected_job %}
+<div class="dash-card" id="selected-cover-letter-job" style="margin-top:20px;">
+    <div class="dash-card-head"><h3>Loaded Job Context</h3></div>
+    <p id="selected-cover-letter-title"><strong>{{ selected_job.title }}</strong></p>
+    <p id="selected-cover-letter-company" class="muted">{{ selected_job.company }}</p>
+    <p id="selected-cover-letter-location" class="muted">{% if selected_job.location %}{{ selected_job.location }}{% endif %}</p>
+</div>
+{% endif %}
+
+<div class="dash-card" style="margin-top:20px;">
+    <div class="dash-card-head">
+        <h3>Generated Letter Editor</h3>
+        <span id="cover-letter-fallback-status" class="status-badge under_review" hidden>AI fallback used</span>
+    </div>
+    <input id="cover-letter-id" type="hidden" value="{{ selected_letter.id if selected_letter else '' }}">
+    <textarea id="cover-letter-editor" name="cover_letter" rows="22" maxlength="20000"
+              placeholder="Generate a letter, then edit it here before saving."
+              style="width:100%;padding:14px;border:1px solid var(--border);border-radius:8px;line-height:1.6;">{% if selected_letter %}{{ selected_letter.content }}{% endif %}</textarea>
+    <div class="opportunity-actions" style="margin-top:14px;">
+        <button type="button" class="btn btn-primary" id="save-cover-letter">Save Letter</button>
+        <button type="button" class="btn btn-outline" id="regenerate-cover-letter">Regenerate</button>
+    </div>
+    <p class="muted" style="margin-top:10px;">Saving preserves your edited text exactly. Regeneration is explicit and creates a new draft without overwriting the saved letter until you save it.</p>
+    <div id="cover-letter-facts" style="margin-top:12px;"></div>
+    <div id="cover-letter-flags" style="margin-top:8px;"></div>
+</div>
+
+<div class="dash-card" style="margin-top:20px;">
+    <div class="dash-card-head"><h3>Previously Saved Letters</h3></div>
+    <p class="muted">Load a saved letter to view or edit it. Only your own saved letters are shown.</p>
+    {% if letters %}
+        {% for letter in letters %}
+        <div class="saved-cover-letter" style="border-top:1px solid var(--border);padding:12px 0;">
+            <button type="button" class="btn btn-outline load-cover-letter" data-letter-id="{{ letter.id }}" style="margin-bottom:7px;">Load Letter</button>
+            {% if letter.job_title %}
+                <p><strong>{{ letter.job_title }}</strong>{% if letter.job_company %} — {{ letter.job_company }}{% endif %}</p>
+            {% else %}
+                <p><strong>Generic Cover Letter</strong></p>
+            {% endif %}
+            <p class="muted">{% if letter.created_at %}Saved {{ letter.created_at }}{% endif %}</p>
+            <p class="muted">{{ letter.content|truncate(180, true, '…') }}</p>
+        </div>
+        {% endfor %}
+    {% else %}
+        <p class="muted">No saved cover letters yet.</p>
+    {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const form = document.getElementById('cover-letter-form');
+    const roleSelect = document.getElementById('target-role');
+    const details = document.getElementById('cover-letter-details');
+    const editor = document.getElementById('cover-letter-editor');
+    const letterId = document.getElementById('cover-letter-id');
+    const status = document.getElementById('cover-letter-status');
+    const fallbackStatus = document.getElementById('cover-letter-fallback-status');
+    const facts = document.getElementById('cover-letter-facts');
+    const flags = document.getElementById('cover-letter-flags');
+    const jobCard = document.getElementById('selected-cover-letter-job');
+    const generateButton = document.getElementById('generate-cover-letter');
+    const saveButton = document.getElementById('save-cover-letter');
+    const regenerateButton = document.getElementById('regenerate-cover-letter');
+    // This is populated only for an explicitly loaded legacy/job-specific
+    // letter. A normal page load always starts with no associated job.
+    let associatedJobId = {{ (selected_job_id or '')|tojson }};
+
+    if (roleSelect) {
+        roleSelect.addEventListener('change', () => {
+            // A changed role must resolve a new representative context rather
+            // than reusing the representative for the previous selection.
+            associatedJobId = null;
+            if (jobCard) jobCard.hidden = true;
+        });
+    }
+
+    function showStatus(message) {
+        status.hidden = false;
+        status.textContent = message;
+    }
+
+    function setBusy(busy) {
+        [generateButton, saveButton, regenerateButton].forEach(button => { button.disabled = busy; });
+        if (busy) showStatus('Working…');
+    }
+
+    function showJob(job) {
+        if (!job || !job.job_id || !jobCard) return;
+        jobCard.hidden = false;
+        document.getElementById('selected-cover-letter-title').textContent = job.title || 'Selected job';
+        document.getElementById('selected-cover-letter-company').textContent = job.company || '';
+        document.getElementById('selected-cover-letter-location').textContent = job.location || '';
+    }
+
+    function renderFacts(items) {
+        facts.replaceChildren();
+        if (!Array.isArray(items) || items.length === 0) return;
+        const heading = document.createElement('p');
+        heading.className = 'muted';
+        heading.textContent = 'Highlighted verified facts:';
+        facts.appendChild(heading);
+        const list = document.createElement('ul');
+        items.forEach(item => {
+            const li = document.createElement('li');
+            li.textContent = String(item);
+            list.appendChild(li);
+        });
+        facts.appendChild(list);
+    }
+
+    function renderFlags(items) {
+        flags.replaceChildren();
+        if (!Array.isArray(items) || items.length === 0) return;
+        const heading = document.createElement('p');
+        heading.className = 'muted';
+        heading.textContent = 'Safety notes:';
+        flags.appendChild(heading);
+        const list = document.createElement('ul');
+        items.forEach(item => {
+            const li = document.createElement('li');
+            if (item && typeof item === 'object') {
+                li.textContent = `${item.claim || 'Model output'}: ${item.reason || ''}`;
+            } else {
+                li.textContent = String(item);
+            }
+            list.appendChild(li);
+        });
+        flags.appendChild(list);
+    }
+
+    function applyGenerated(data, preserveId) {
+        editor.value = data.cover_letter || data.content || '';
+        if (!preserveId) letterId.value = data.letter_id || '';
+        fallbackStatus.hidden = !data.used_fallback;
+        renderFacts(data.highlighted_verified_facts || []);
+        renderFlags(data.flagged_claims || []);
+        if (data.job && data.job.job_id) {
+            associatedJobId = String(data.job.job_id);
+            showJob(data.job);
+        } else if (!letterId.value) {
+            associatedJobId = null;
+            if (jobCard) jobCard.hidden = true;
+        }
+    }
+
+    async function requestJson(url, options) {
+        const response = await fetch(url, options);
+        let data;
+        try { data = await response.json(); } catch (error) { data = {}; }
+        if (!response.ok || !data.success) throw new Error(data.error || 'The request could not be completed.');
+        return data;
+    }
+
+    form.addEventListener('submit', async event => {
+        event.preventDefault();
+        setBusy(true);
+        try {
+            const data = await requestJson('{{ url_for("cover_letter.generate") }}', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    generic: true,
+                    target_role: roleSelect ? roleSelect.value : '',
+                    job_id: associatedJobId || null,
+                    extra_context: details.value
+                })
+            });
+            applyGenerated(data, false);
+            showStatus(data.used_fallback ? 'Draft generated with deterministic fallback content.' : 'Draft generated and validated. You can edit it before saving.');
+        } catch (error) { showStatus(error.message); }
+        finally { setBusy(false); }
+    });
+
+    saveButton.addEventListener('click', async () => {
+        if (!editor.value.trim()) { showStatus('Generate or enter a letter before saving.'); return; }
+        setBusy(true);
+        try {
+            const data = await requestJson('{{ url_for("cover_letter.save") }}', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                body: JSON.stringify({ letter_id: letterId.value || null, job_id: associatedJobId || null, content: editor.value })
+            });
+            letterId.value = String(data.letter_id || data.id || '');
+            associatedJobId = data.job_id || '';
+            if (data.job) showJob(data.job);
+            showStatus('Saved exactly the edited letter.');
+        } catch (error) { showStatus(error.message); }
+        finally { setBusy(false); }
+    });
+
+    regenerateButton.addEventListener('click', async () => {
+        setBusy(true);
+        try {
+            const url = letterId.value ? '{{ url_for("cover_letter.regenerate") }}' : '{{ url_for("cover_letter.generate") }}';
+            const payload = {
+                generic: true,
+                target_role: roleSelect ? roleSelect.value : '',
+                job_id: associatedJobId || null,
+                extra_context: details.value
+            };
+            if (letterId.value) payload.letter_id = letterId.value;
+            const data = await requestJson(url, {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            applyGenerated(data, Boolean(letterId.value));
+            showStatus('Fresh draft generated. Review and save it to update the stored letter.');
+        } catch (error) { showStatus(error.message); }
+        finally { setBusy(false); }
+    });
+
+    document.querySelectorAll('.load-cover-letter').forEach(button => {
+        button.addEventListener('click', async () => {
+            setBusy(true);
+            try {
+                const data = await requestJson(`{{ url_for("cover_letter.load", letter_id=0) }}`.replace('/0/', `/${button.dataset.letterId}/`), { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
+                const letter = data.letter || data;
+                editor.value = letter.content || '';
+                letterId.value = String(letter.id || letter.letter_id || '');
+                associatedJobId = letter.job_id || null;
+                if (roleSelect) {
+                    if (letter.job && letter.job.title) {
+                        const matchingRole = Array.from(roleSelect.options).find(option => option.value === letter.job.title);
+                        if (matchingRole) roleSelect.value = matchingRole.value;
+                    } else {
+                        roleSelect.value = '';
+                    }
+                }
+                if (letter.job) showJob(letter.job);
+                else if (jobCard) jobCard.hidden = true;
+                details.value = '';
+                renderFacts([]);
+                renderFlags([]);
+                fallbackStatus.hidden = true;
+                showStatus('Saved letter loaded. Edits will not be saved until you click Save Letter.');
+            } catch (error) { showStatus(error.message); }
+            finally { setBusy(false); }
+        });
+    });
+}());
+</script>
+{% endblock %}

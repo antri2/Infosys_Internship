@@ -48,6 +48,7 @@ def register():
     session["user_id"] = user_id
     session["user_name"] = name
     session["resume_uploaded"] = False
+    session["just_registered"] = True
     return redirect(url_for("resume.upload"))
 
 

@@ -33,9 +33,16 @@
                         {% endif %}
                     </p>
                 </div>
-                <span class="match-badge {{ 'mid' if job.match_percent < 70 else '' }} {{ 'low' if job.match_percent < 40 else '' }}">
-                    {{ job.match_percent }}% Match
+                {% if job.match_available %}
+                <span class="match-badge {{ 'mid' if job.match_percent < 70 else '' }} {{ 'low' if job.match_percent < 40 else '' }}"
+                      title="Profile Skill Fit based on required and preferred skills; not a probability of getting the job.">
+                    {{ job.match_percent }}% Skill Fit
                 </span>
+                {% else %}
+                <span class="match-badge low" title="Add skills to your profile to calculate Profile Skill Fit.">
+                    Add skills for fit
+                </span>
+                {% endif %}
                 <button class="opportunity-toggle" onclick="toggleDetail('detail-{{ job.job_id }}')">View Details ▾</button>
             </div>
 
@@ -43,27 +50,70 @@
                 <h4>Description</h4>
                 <p>{{ job.description }}</p>
 
+                <h4>Why this matches</h4>
+                <ul class="muted">
+                    {% for reason in job.match_reasons %}<li>{{ reason }}</li>{% endfor %}
+                </ul>
+
+                {% if job.match_available %}
+                <p class="muted">
+                    <strong>Profile Skill Fit: {{ job.match_percent }}%</strong> based on required and preferred skills.
+                    This is not an overall probability of getting the job.
+                </p>
+                {% endif %}
+
                 {% if job.responsibilities %}
                 <h4>Responsibilities</h4>
                 <p>{{ job.responsibilities }}</p>
                 {% endif %}
 
-                <div class="skill-gap-cols">
-                    <div>
-                        <h4> Skills you have</h4>
+                <div class="opportunity-comparison" aria-label="Profile and job skill comparison">
+                    <section class="comparison-panel comparison-requirements">
+                        <h4>Company Requirements</h4>
+                        <div class="comparison-group">
+                            <span class="comparison-label">Required skills</span>
+                            <div class="skill-pill-row">
+                                {% for s in (job.required_skills or '').split(',') if s.strip() %}
+                                    <span class="skill-pill required">{{ s.strip() }}</span>
+                                {% else %}
+                                    <span class="muted comparison-empty">Not specified</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="comparison-group">
+                            <span class="comparison-label">Preferred skills</span>
+                            <div class="skill-pill-row">
+                                {% for s in (job.preferred_skills or '').split(',') if s.strip() %}
+                                    <span class="skill-pill preferred">{{ s.strip() }}</span>
+                                {% else %}
+                                    <span class="muted comparison-empty">Not specified</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="comparison-panel comparison-profile">
+                        <h4>Your Profile</h4>
+                        <span class="comparison-label">Skills you have / matched skills</span>
                         <div class="skill-pill-row">
                             {% for s in job.matched_skills %}<span class="skill-pill have">{{ s }}</span>{% endfor %}
                             {% for s in job.matched_preferred %}<span class="skill-pill have">{{ s }}</span>{% endfor %}
-                            {% if not job.matched_skills and not job.matched_preferred %}<span class="muted" style="font-size:12.5px">None yet</span>{% endif %}
+                            {% if not job.matched_skills and not job.matched_preferred %}
+                                <span class="muted comparison-empty">No matching skills recorded</span>
+                            {% endif %}
                         </div>
-                    </div>
-                    <div>
-                        <h4> Skills to learn</h4>
+                    </section>
+
+                    <section class="comparison-panel comparison-learn">
+                        <h4>Skills to Learn</h4>
                         <div class="skill-pill-row">
                             {% for s in job.missing_skills %}<span class="skill-pill missing">{{ s }}</span>{% endfor %}
-                            {% if not job.missing_skills %}<span class="muted" style="font-size:12.5px">You meet all required skills 🎉</span>{% endif %}
+                            {% for s in job.missing_preferred %}<span class="skill-pill missing">{{ s }}</span>{% endfor %}
+                            {% if not job.missing_skills and not job.missing_preferred %}
+                                <span class="muted comparison-empty">No missing skills reported</span>
+                            {% endif %}
                         </div>
-                    </div>
+                    </section>
                 </div>
 
                 <h4>Qualifications</h4>
@@ -76,14 +126,20 @@
                     <button class="btn btn-primary" onclick="trackApplication({{ job.job_id }}, 'apply', this)">
                         {{ 'Applied ✓' if job.application_status in ('applied','interview','under_review') else 'Apply' }}
                     </button>
+                    <button type="button" class="btn btn-outline ai-summary-button"
+                            onclick="getAISummary({{ job.job_id }}, this)">
+                        Get AI Summary
+                    </button>
+                    <a class="btn btn-outline" href="{{ url_for('skill_gap.view', job_id=job.job_id, target_role=job.title) }}">Skill Gap</a>
+                    <a class="btn btn-outline" href="{{ url_for('interview.view', job_id=job.job_id, target_role=job.title, target_source='custom') }}">Prepare for Interview</a>
                     {% if job.apply_link %}
-                    
                     {% endif %}
                 </div>
+                <p id="ai-summary-{{ job.job_id }}" class="muted" aria-live="polite" hidden></p>
             </div>
         </div>
         {% else %}
-        <p class="muted">No opportunities found. Try a different search, or check back after the dataset/index is built.</p>
+        <p class="muted">No sufficiently relevant opportunities found. Try different skills or search terms.</p>
         {% endfor %}
     </div>
 </div>
@@ -96,13 +152,101 @@ function toggleDetail(id) {
     document.getElementById(id).classList.toggle('open');
 }
 
-function trackApplication(jobId, action, btn) {
-    fetch(`/applications/${jobId}/${action}`, { method: 'POST' })
-        .then(res => res.json())
-        .then(() => {
-            btn.textContent = action === 'save' ? 'Saved ✓' : 'Applied ✓';
-        })
-        .catch(() => alert('Something went wrong. Please try again.'));
+async function getAISummary(jobId, btn) {
+    if (btn.disabled) return;
+
+    const result = document.getElementById(`ai-summary-${jobId}`);
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Generating…';
+    result.hidden = false;
+    result.textContent = 'Generating a personalized summary…';
+
+    try {
+        const response = await fetch(`/opportunities/${jobId}/ai-summary`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' }
+        });
+        const responseText = await response.text();
+        let data = {};
+        if (responseText) {
+            try {
+                data = JSON.parse(responseText);
+            } catch (_) {
+                data = {};
+            }
+        }
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.error || `Request failed with status ${response.status}.`);
+        }
+
+        result.textContent = data.summary;
+    } catch (error) {
+        result.textContent = error.message || 'The job summary could not be generated.';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+    }
+}
+
+async function trackApplication(jobId, action, btn) {
+    if (btn.disabled) return;
+
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = action === 'save' ? 'Saving…' : 'Applying…';
+
+    try {
+        const response = await fetch(`/applications/${jobId}/${action}`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' }
+        });
+        const responseText = await response.text();
+        let data = {};
+        if (responseText) {
+            try {
+                data = JSON.parse(responseText);
+            } catch (_) {
+                data = {};
+            }
+        }
+
+        if (!response.ok) {
+            throw new Error(data.error || `Request failed with status ${response.status}.`);
+        }
+
+        const actions = btn.closest('.opportunity-actions');
+        const saveButton = actions ? actions.querySelector('.btn-outline') : null;
+        const applyButton = actions ? actions.querySelector('.btn-primary') : null;
+        const status = data.status;
+
+        if (saveButton) {
+            saveButton.textContent = status === 'saved' ? 'Saved ✓' : 'Save';
+        }
+        if (applyButton) {
+            if (status === 'rejected') {
+                applyButton.textContent = 'Rejected';
+            } else if (['applied', 'interview', 'under_review'].includes(status)) {
+                applyButton.textContent = 'Applied ✓';
+            } else {
+                applyButton.textContent = 'Apply';
+            }
+        }
+
+        if (data.message) {
+            alert(data.message);
+        }
+    } catch (error) {
+        alert(error.message || 'Something went wrong. Please try again.');
+    } finally {
+        btn.disabled = false;
+        if (btn.textContent === 'Saving…' || btn.textContent === 'Applying…') {
+            btn.textContent = originalText;
+        }
+    }
 }
 </script>
 {% endblock %}

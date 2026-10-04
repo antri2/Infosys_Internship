@@ -20,7 +20,7 @@
     {% if applications %}
     <table class="app-table">
         <thead>
-            <tr><th>Job Title</th><th>Company</th><th>Location</th><th>Status</th><th>Updated</th></tr>
+            <tr><th>Job Title</th><th>Company</th><th>Location</th><th>Status</th><th>Updated</th><th>Next Step</th></tr>
         </thead>
         <tbody>
             {% for a in applications %}
@@ -30,6 +30,13 @@
                 <td>{{ a.location }}</td>
                 <td><span class="status-badge {{ a.status }}">{{ a.status.replace('_', ' ') | title }}</span></td>
                 <td>{{ a.applied_on.strftime('%b %d, %Y') if a.applied_on else '' }}</td>
+                <td>
+                    {% if a.status == 'interview' %}
+                    <a class="btn btn-outline" href="{{ url_for('interview.view', job_id=a.job_id, target_role=a.title, target_source='custom') }}">Prepare for Interview</a>
+                    {% else %}
+                    <span class="muted">—</span>
+                    {% endif %}
+                </td>
             </tr>
             {% endfor %}
         </tbody>

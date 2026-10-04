@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 
 from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify
@@ -15,6 +16,22 @@ os.makedirs(config.UPLOAD_FOLDER, exist_ok=True)
 
 def _require_login():
     return "user_id" in session
+
+
+def _sanitize_cgpa(raw) -> float | None:
+    """
+    The LLM may return "8.5", "8.5 CGPA", "85%", or similar -- pull out
+    just the number so it fits the DECIMAL(4,2) column instead of
+    crashing the insert. Returns None if nothing numeric is found or the
+    value is out of range for that column (max 99.99).
+    """
+    if raw is None:
+        return None
+    match = re.search(r"\d+(\.\d+)?", str(raw))
+    if not match:
+        return None
+    value = float(match.group())
+    return value if 0 <= value <= 99.99 else None
 
 
 @resume_bp.route("/upload", methods=["GET"])
@@ -83,16 +100,18 @@ def _save_extracted_profile(db, user_id: int, resume_id: int, extracted: dict) -
     with db.cursor() as cursor:
         cursor.execute(
             """
-            INSERT INTO profiles (user_id, resume_id, summary)
-            VALUES (%s, %s, %s)
-            ON DUPLICATE KEY UPDATE resume_id = VALUES(resume_id), summary = VALUES(summary)
+            INSERT INTO profiles (user_id, resume_id, summary, cgpa)
+            VALUES (%s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE resume_id = VALUES(resume_id), summary = VALUES(summary),
+                cgpa = COALESCE(VALUES(cgpa), cgpa)
             """,
-            (user_id, resume_id, extracted.get("summary")),
+            (user_id, resume_id, extracted.get("summary"), _sanitize_cgpa(extracted.get("cgpa"))),
         )
         cursor.execute("DELETE FROM skills WHERE user_id = %s", (user_id,))
         cursor.execute("DELETE FROM education WHERE user_id = %s", (user_id,))
         cursor.execute("DELETE FROM experience WHERE user_id = %s", (user_id,))
         cursor.execute("DELETE FROM projects WHERE user_id = %s", (user_id,))
+        cursor.execute("DELETE FROM certifications WHERE user_id = %s", (user_id,))
 
         for s in extracted.get("skills", []):
             cursor.execute(
@@ -120,5 +139,23 @@ def _save_extracted_profile(db, user_id: int, resume_id: int, extracted: dict) -
             cursor.execute(
                 "INSERT INTO projects (user_id, title, description, tech_stack) VALUES (%s, %s, %s, %s)",
                 (user_id, p.get("title"), p.get("description"), p.get("tech_stack")),
+            )
+        for c in extracted.get("certifications", []):
+            if not c.get("name"):
+                continue
+            cursor.execute(
+                """
+                INSERT INTO certifications
+                    (user_id, name, issuer, issue_date, expiry_date, credential_url)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    user_id,
+                    c.get("name"),
+                    c.get("issuer"),
+                    c.get("issue_date"),
+                    c.get("expiry_date"),
+                    c.get("credential_url"),
+                ),
             )
         db.commit()

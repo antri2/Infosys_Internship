@@ -6,9 +6,7 @@ install -- just onnxruntime + a small model, downloaded once (~100MB)
 and cached locally. Fully offline after that first download.
 
 Model: BAAI/bge-small-en-v1.5 -- 384-dim vectors, strong short-text
-retrieval performance. To use your mentor's exact pick instead, change
-MODEL_NAME to "sentence-transformers/all-MiniLM-L6-v2" -- fastembed
-supports that model too, no other code changes needed.
+retrieval performance. 
 """
 from functools import lru_cache
 

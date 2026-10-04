@@ -6,13 +6,18 @@ computes a match percentage + missing skills per job via
 services.job_matcher, and shows which jobs the user has already
 saved/applied to.
 """
-from flask import Blueprint, render_template, request, redirect, url_for, session
+import logging
+
+from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
 
 from database.db import get_db
+from services.context_builder import get_candidate_context, get_job_context
 from services.job_matcher import compute_match
-from services.opportunity_service import search_jobs
+from services.job_summary_agent import generate_job_summary
+from services.opportunity_service import recommend_jobs
 
 opportunities_bp = Blueprint("opportunities", __name__, url_prefix="/opportunities")
+logger = logging.getLogger(__name__)
 
 
 def _require_login():
@@ -47,20 +52,15 @@ def list_view():
         # even when they haven't typed a search.
         search_query = ", ".join(user_skills) if user_skills else "internship entry level"
 
-    jobs = search_jobs(search_query, top_k=20)
+    ranked_jobs = recommend_jobs(search_query, user_skills, top_k=20)
 
     enriched = []
-    for job in jobs:
-        match_info = compute_match(user_skills, job)
+    for job in ranked_jobs:
         job_id = int(job["job_id"])
         enriched.append({
             **job,
-            "job_id": job_id,
-            **match_info,
             "application_status": applied_status.get(job_id),
         })
-
-    enriched.sort(key=lambda j: j["match_percent"], reverse=True)
 
     return render_template(
         "opportunities.html",
@@ -69,3 +69,36 @@ def list_view():
         search_query=request.args.get("q", ""),
         has_skills=bool(user_skills),
     )
+
+
+@opportunities_bp.route("/<int:job_id>/ai-summary", methods=["POST"])
+def ai_summary(job_id):
+    """Return a short, fact-grounded summary for one selected MySQL job."""
+    if not _require_login():
+        return jsonify({"success": False, "error": "Not logged in."}), 401
+
+    db = get_db()
+    job = get_job_context(db, job_id)
+    if not job:
+        return jsonify({
+            "success": False,
+            "error": f"Job {job_id} was not found.",
+        }), 404
+
+    try:
+        candidate = get_candidate_context(db, session["user_id"])
+        match_info = compute_match(candidate.get("skills", []), job)
+        result = generate_job_summary(candidate, job, match_info)
+    except Exception:
+        logger.exception("AI job summary generation failed for job %s", job_id)
+        return jsonify({
+            "success": False,
+            "error": "The job summary could not be generated right now.",
+        }), 503
+
+    return jsonify({
+        "success": True,
+        "job_id": job_id,
+        "summary": result["summary"],
+        "used_fallback": result["used_fallback"],
+    })

@@ -25,13 +25,24 @@ matching exactly this shape:
   "skills": [{{"name": "Python", "category": "programming_language"}}],
   "education": [{{"institution": "...", "degree": "...", "field": "...", "start_date": "...", "end_date": "..."}}],
   "experience": [{{"title": "...", "organization": "...", "start_date": "...", "end_date": "...", "description": "..."}}],
-  "projects": [{{"title": "...", "description": "...", "tech_stack": "..."}}]
+  "projects": [{{"title": "...", "description": "...", "tech_stack": "..."}}],
+  "certifications": [{{"name": "...", "issuer": "...", "issue_date": "...", "expiry_date": "...", "credential_url": "..."}}],
+  "cgpa": "the CGPA or percentage as it appears in the resume (e.g. \\"8.5\\" or \\"85%\\"), or null"
 }}
 
 Rules:
 - If a field isn't present in the resume, use null (not a made-up value).
-- Do not invent skills, dates, or experience that aren't in the text.
+- Do not invent skills, dates, experience, or a CGPA that aren't in the text.
 - "category" for a skill should be one of: programming_language, framework, tool, soft_skill, other.
+- For "cgpa": use the value from the most recent/highest degree if multiple are listed. Look near
+  the education section -- it may be labeled "CGPA", "GPA", "Percentage", or "Aggregate".
+- For "projects": look carefully throughout the ENTIRE resume, not just under a heading literally
+  named "Projects" -- projects are very often described under "Academic Projects", "Personal
+  Projects", "Course Projects", "Mini Projects", or even as bullet points inside the Experience
+  section. Treat anything the candidate built, developed, or created as a project worth including,
+  even a small one.
+- For "certifications": include only certifications explicitly evidenced in the resume. Use null
+  for unavailable fields and return an empty list when no certifications are present.
 
 Resume text:
 ---
@@ -39,7 +50,7 @@ Resume text:
 ---
 """
 
-REQUIRED_KEYS = {"summary", "skills", "education", "experience", "projects"}
+REQUIRED_KEYS = {"summary", "skills", "education", "experience", "projects", "cgpa"}
 
 
 class ResumeParsingError(Exception):
@@ -57,12 +68,9 @@ def _generate(prompt: str) -> str:
     response = client.chat.completions.create(
         model=config.GROQ_MODEL_NAME,
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=3000,
+        max_tokens=6000,
         temperature=0,
         
-        reasoning_effort="low",   # only used by gpt-oss models; ignored
-                                   # (safely) by non-reasoning models.
-        reasoning_format="hidden",
     )
     return response.choices[0].message.content
 
@@ -81,6 +89,9 @@ def _parse_llm_output(raw_text: str) -> dict:
     except json.JSONDecodeError as e:
         raise ResumeParsingError(f"LLM did not return valid JSON: {e}")
 
+    if not isinstance(data, dict):
+        raise ResumeParsingError("LLM output was not a JSON object.")
+
     if not REQUIRED_KEYS.issubset(data.keys()):
         raise ResumeParsingError(f"LLM output is missing required fields: {REQUIRED_KEYS - data.keys()}")
 
@@ -88,6 +99,16 @@ def _parse_llm_output(raw_text: str) -> dict:
     data.setdefault("education", [])
     data.setdefault("experience", [])
     data.setdefault("projects", [])
+    data.setdefault("certifications", [])
+    data.setdefault("cgpa", None)
+    if not isinstance(data["certifications"], list):
+        data["certifications"] = []
+    else:
+        data["certifications"] = [
+            certification
+            for certification in data["certifications"]
+            if isinstance(certification, dict)
+        ]
     return data
 
 

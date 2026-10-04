@@ -4,21 +4,902 @@
 
 <div class="page-head">
     <h1>Interview Preparation</h1>
-    <p>Practice common questions across categories to walk into your next interview ready.</p>
+    <p>Prepare for interviews based on your profile, target role, or a specific job.</p>
 </div>
 
-<div class="interview-grid">
-    {% for category in categories %}
+<form id="interview-form" data-explicit-job-id="{{ specific_job_id or '' }}">
     <div class="dash-card">
-        <div class="dash-card-head"><h3>{{ category.icon }} {{ category.name }}</h3></div>
-        {% for question, answer in category.questions %}
-        <div class="interview-q">
-            <p class="q">{{ question }}</p>
-            <p class="a">{{ answer }}</p>
+        <div class="dash-card-head"><h3>Interview Target</h3></div>
+
+        <div class="target-toggle" role="tablist" aria-label="Interview target source">
+            <button type="button" class="target-toggle-btn {{ 'active' if target_source != 'custom' else '' }}"
+                    data-source="role" role="tab" aria-selected="{{ 'true' if target_source != 'custom' else 'false' }}">Select a Role</button>
+            <button type="button" class="target-toggle-btn {{ 'active' if target_source == 'custom' else '' }}"
+                    data-source="custom" role="tab" aria-selected="{{ 'true' if target_source == 'custom' else 'false' }}">Custom Job</button>
         </div>
-        {% endfor %}
+
+        {% if selected_job %}
+        <div class="selected-job-banner">
+            <strong>Exact Opportunity selected:</strong>
+            {{ selected_job.title }} &middot; {{ selected_job.company }}
+            <p class="muted" style="margin:6px 0 0;">Questions will be based on this exact posting. Clear the selection to use role-level preparation.</p>
+            <a class="btn btn-outline" style="margin-top:10px;"
+               href="{{ url_for('interview.view', target_role=selected_role) }}">Use role-level preparation instead</a>
+        </div>
+        {% endif %}
+
+        <div id="target-role-panel" class="target-panel" {{ 'hidden' if target_source == 'custom' and selected_job else '' }}>
+            <label for="target-role"><strong>Target Role</strong></label>
+            <select id="target-role" name="target_role" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;">
+                {% for role in role_options %}
+                <option value="{{ role }}" {% if selected_role == role %}selected{% endif %}>{{ role }}</option>
+                {% endfor %}
+                <option value="custom" {% if selected_role not in role_options and selected_role != 'custom' %}selected{% endif %}>Other</option>
+            </select>
+            <input id="custom-role" name="custom_role" type="text" maxlength="120"
+                   placeholder="Enter a custom role"
+                   value="{{ '' if selected_role in role_options or selected_role == 'custom' else selected_role }}"
+                   hidden style="width:100%;margin-top:8px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;">
+            <p class="muted" style="margin:8px 0 0;">A role on its own is enough. No job is selected from the dataset automatically.</p>
+        </div>
+
+        <div id="target-custom-panel" class="target-panel" {{ 'hidden' if target_source != 'custom' else '' }}>
+            <p class="muted" style="margin:0 0 12px;">Practise against a specific job. The pasted job description is the main source of requirements; the company name is context only.</p>
+            <label for="custom-company"><strong>Company Name (Optional)</strong></label>
+            <input id="custom-company" name="company" type="text" maxlength="200" value="{{ company }}"
+                   placeholder="Enter company name"
+                   style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;">
+            <label for="custom-jd" style="display:block;margin-top:14px;"><strong>Job Description (Optional)</strong></label>
+            <textarea id="custom-jd" name="job_description" rows="6" maxlength="4000"
+                      placeholder="Paste job description here..."
+                      style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;line-height:1.55;">{{ job_description }}</textarea>
+        </div>
     </div>
-    {% endfor %}
+
+    <div class="dash-card" style="margin-top:20px;">
+        <div class="dash-card-head"><h3>Focus Areas (Optional)</h3></div>
+        <input id="focus-areas" name="focus_areas" type="text" maxlength="200" value="{{ focus_areas }}"
+               placeholder="Python, Machine Learning, Generative AI..."
+               style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;">
+        <p class="muted" style="margin:8px 0 0;">For example: "Focus on Python and Machine Learning" or "Focus on SQL and Data Analysis".</p>
+    </div>
+
+    <div class="dash-card" style="margin-top:20px;">
+        <div class="dash-card-head"><h3>Interview Category</h3></div>
+        <div class="category-grid" id="category-grid" role="radiogroup" aria-label="Interview category">
+            {% for card in category_cards %}
+            <button type="button" class="category-card {{ 'active' if selected_category == card.code else '' }}"
+                    data-category="{{ card.code }}" role="radio"
+                    aria-checked="{{ 'true' if selected_category == card.code else 'false' }}">
+                <span class="category-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+                         stroke-linecap="round" stroke-linejoin="round">{{ category_icons.get(card.icon, '')|safe }}</svg>
+                </span>
+                <span class="category-title">{{ card.title }}</span>
+                <span class="category-description">{{ card.description }}</span>
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="dash-card" style="margin-top:20px;">
+        <div class="form-grid">
+            <div>
+                <span class="field-label"><strong>Select Level</strong></span>
+                <div class="segmented" id="difficulty-group" role="radiogroup" aria-label="Select level">
+                    {% for code, label in difficulties.items() %}
+                    <button type="button" class="segmented-btn {{ 'active' if selected_difficulty == code else '' }}"
+                            data-difficulty="{{ code }}" role="radio"
+                            aria-checked="{{ 'true' if selected_difficulty == code else 'false' }}">{{ label }}</button>
+                    {% endfor %}
+                </div>
+            </div>
+            <div>
+                <span class="field-label"><strong>Number of Questions</strong></span>
+                <div class="segmented" id="count-group" role="radiogroup" aria-label="Number of questions">
+                    {% for option in count_options %}
+                    <button type="button" class="segmented-btn {{ 'active' if selected_count == option else '' }}"
+                            data-count="{{ option }}" role="radio"
+                            aria-checked="{{ 'true' if selected_count == option else 'false' }}">{{ option }}</button>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="dash-card" style="margin-top:20px;">
+        <div class="action-row">
+            <button type="button" class="btn btn-primary btn-lg" id="start-practice">Start Practice</button>
+            <button type="button" class="btn btn-primary btn-lg btn-secondary-accent" id="start-mock">Start Mock Interview</button>
+        </div>
+        <p class="muted" style="margin:12px 0 0;">
+            Practice mode shows the question, a suggested answer, and how to structure it.
+            Mock interview asks the question, evaluates your typed answer, and gives you a tip on request.
+        </p>
+    </div>
+</form>
+
+<p id="interview-status" class="muted" aria-live="polite" style="margin-top:14px;" hidden></p>
+{% if error %}<div class="flash-banner" style="margin-top:14px;"><p>{{ error }}</p></div>{% endif %}
+
+<div id="session-panel" style="margin-top:20px;" hidden>
+    <div class="dash-card">
+        <div class="session-head">
+            <div>
+                <h3 id="session-title">Practice Session</h3>
+                <p id="session-meta" class="muted"></p>
+            </div>
+            <button type="button" class="btn btn-outline" id="end-session">End Session</button>
+        </div>
+        <div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progress-fill"></div></div>
+        <p id="session-progress" class="muted" style="margin:10px 0 0;"></p>
+    </div>
+
+    <div class="dash-card" id="question-card" style="margin-top:20px;">
+        <div class="question-meta">
+            <span class="tag" id="question-category-tag"></span>
+            <span class="tag" id="question-difficulty-tag"></span>
+        </div>
+        <h3 id="question-text" style="margin:12px 0 0;line-height:1.5;"></h3>
+
+        <div id="practice-answer-area" style="margin-top:18px;">
+            <button type="button" class="btn btn-primary" id="show-answer">Show Answer</button>
+            <div id="practice-answer" class="answer-block" hidden>
+                <h4>Suggested Answer</h4>
+                <p id="suggested-answer" class="answer-text"></p>
+                <h4>How to Answer in an Interview</h4>
+                <ol id="how-to-answer" class="how-to-list"></ol>
+            </div>
+        </div>
+
+        <div id="mock-answer-area" style="margin-top:18px;" hidden>
+            <label for="mock-answer"><strong>Type your answer here...</strong></label>
+            <textarea id="mock-answer" rows="7" maxlength="6000"
+                      style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;line-height:1.55;"></textarea>
+            <div class="action-row" style="margin-top:12px;">
+                <button type="button" class="btn btn-primary" id="submit-answer">Submit Answer</button>
+                <button type="button" class="btn btn-outline" id="show-tip">Tip</button>
+                <button type="button" class="btn btn-outline" id="skip-question">Skip</button>
+            </div>
+            <p id="tip-text" class="tip-text" hidden></p>
+        </div>
+
+        <div id="feedback-area" class="feedback-block" hidden>
+            <h3>Answer Feedback</h3>
+            <div class="feedback-good">
+                <h4>What You Did Well</h4>
+                <ul id="feedback-well"></ul>
+            </div>
+            <div class="feedback-improve">
+                <h4>What Could Be Improved</h4>
+                <ul id="feedback-improve"></ul>
+            </div>
+            <div class="feedback-answer">
+                <h4>Better Answer Approach</h4>
+                <p id="feedback-suggested" class="answer-text"></p>
+            </div>
+            <div class="feedback-improve">
+                <h4>How to Improve</h4>
+                <p id="feedback-guidance" class="answer-text"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Practice Session only. Mock Interview navigates with Submit/Skip. -->
+    <div class="dash-card" id="practice-nav" style="margin-top:20px;" hidden>
+        <div class="action-row">
+            <button type="button" class="btn btn-outline" id="prev-question">Previous Question</button>
+            <button type="button" class="btn btn-primary" id="next-question">Next Question</button>
+        </div>
+    </div>
 </div>
 
+<div id="summary-panel" style="margin-top:20px;" hidden>
+    <div class="dash-card">
+        <div class="dash-card-head"><h3>Mock Interview Complete</h3></div>
+        <p id="summary-performance" class="summary-performance"></p>
+        <div class="summary-grid" id="summary-stats"></div>
+        <div class="summary-lists" id="summary-lists"></div>
+        <p class="muted" style="margin:16px 0 0;">
+            This is a practice assessment of the questions you just attempted. It is not a hiring
+            prediction, a probability of getting the role, or a guarantee of interview performance.
+        </p>
+        <div class="action-row" style="margin-top:16px;">
+            <button type="button" class="btn btn-primary" id="restart-session">Start a New Session</button>
+        </div>
+    </div>
+
+    <div class="dash-card" style="margin-top:20px;">
+        <div class="dash-card-head"><h3>Question-by-Question Review</h3></div>
+        <div id="review-list"></div>
+    </div>
+</div>
+
+<div class="dash-card" style="margin-top:20px;">
+    <div class="history-toggles" role="group" aria-label="Saved preparation sections">
+        <button type="button" class="history-toggle" id="toggle-saved" aria-expanded="false" aria-controls="saved-panel">
+            <span class="history-toggle-title">Saved Preparation</span>
+            <span class="history-toggle-count">{{ recent_plans|length }} plan{{ '' if recent_plans|length == 1 else 's' }}</span>
+        </button>
+        <button type="button" class="history-toggle" id="toggle-recent" aria-expanded="false" aria-controls="recent-panel">
+            <span class="history-toggle-title">Recent Preparation</span>
+            <span class="history-toggle-count">{{ recent_questions|length }} question{{ '' if recent_questions|length == 1 else 's' }}</span>
+        </button>
+        <button type="button" class="history-toggle" id="toggle-history" aria-expanded="false" aria-controls="history-panel">
+            <span class="history-toggle-title">Interview History</span>
+            <span class="history-toggle-count">Mock interviews</span>
+        </button>
+    </div>
+
+    <div id="saved-panel" class="history-panel" hidden style="margin-top:18px;">
+        <h4>Recent Preparation Plans</h4>
+        {% if recent_plans %}
+            {% for item in recent_plans %}
+            <div class="saved-interview-plan" style="border-top:1px solid var(--border);padding:12px 0;">
+                <p><strong>{{ item.plan.target_role or 'Target role' }}</strong></p>
+                <p class="muted"><strong>Priority topics:</strong> {{ item.plan.priority_topics|join(', ') if item.plan.priority_topics else 'Not recorded' }}</p>
+                <p class="muted"><strong>Technical areas:</strong> {{ item.plan.technical_areas_to_revise|join(', ') if item.plan.technical_areas_to_revise else 'Not recorded' }}</p>
+                <p class="muted"><strong>Coding / problem solving:</strong> {{ item.plan.coding_problem_solving_areas|join(', ') if item.plan.coding_problem_solving_areas else 'Not recorded' }}</p>
+                <p class="muted"><strong>HR / behavioral:</strong> {{ item.plan.hr_behavioral_preparation|join(', ') if item.plan.hr_behavioral_preparation else 'Not recorded' }}</p>
+                <p class="muted"><strong>Skill-gap areas:</strong> {{ item.plan.skill_gap_areas|join(', ') if item.plan.skill_gap_areas else 'None reported' }}</p>
+                <p class="muted"><strong>Practice sequence:</strong> {{ item.plan.recommended_practice_sequence|join(', ') if item.plan.recommended_practice_sequence else 'Not recorded' }}</p>
+            </div>
+            {% endfor %}
+        {% else %}<p class="muted">No saved preparation plans yet.</p>{% endif %}
+    </div>
+
+    <div id="recent-panel" class="history-panel" hidden style="margin-top:18px;">
+        <h4>Recent Questions</h4>
+        {% if recent_questions %}
+            {% for item in recent_questions %}
+            <div class="interview-q saved-interview-question">
+                <p class="q">{{ item.question }}</p>
+                <p class="muted">{{ item.role or 'Target role' }} &middot; {{ item.category_label or (item.category or 'Interview')|capitalize }} &middot; {{ item.difficulty_label or (item.difficulty or '')|capitalize }}</p>
+                <p><strong>Reason:</strong> {{ item.reason or 'Not recorded' }}</p>
+                <p><strong>Preparation area:</strong> {{ item.preparation_area or 'Not recorded' }}</p>
+                <p><strong>Guidance:</strong> {{ item.guidance|join(' ') if item.guidance else 'Not recorded' }}</p>
+            </div>
+            {% endfor %}
+        {% else %}<p class="muted">No saved interview questions yet.</p>{% endif %}
+    </div>
+
+    <div id="history-panel" class="history-panel" hidden style="margin-top:18px;">
+        <h4>Completed Mock Interviews</h4>
+        <div id="history-list" class="history-list">
+            <p class="muted" id="history-empty">Loading interview history…</p>
+        </div>
+        <div id="history-detail" class="history-detail" data-url-template="{{ url_for('interview.mock_history_detail', session_id=0) }}" hidden></div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const form = document.getElementById('interview-form');
+    const roleSelect = document.getElementById('target-role');
+    const customRole = document.getElementById('custom-role');
+    const customPanel = document.getElementById('target-custom-panel');
+    const rolePanel = document.getElementById('target-role-panel');
+    const companyInput = document.getElementById('custom-company');
+    const jdInput = document.getElementById('custom-jd');
+    const focusInput = document.getElementById('focus-areas');
+    const status = document.getElementById('interview-status');
+    const sessionPanel = document.getElementById('session-panel');
+    const summaryPanel = document.getElementById('summary-panel');
+
+    const state = {
+        mode: 'practice',
+        questions: [],
+        questionIds: [],
+        index: 0,
+        category: '{{ selected_category }}',
+        difficulty: '{{ selected_difficulty }}',
+        count: {{ selected_count }},
+        results: [],
+        targetRole: '',
+        company: '',
+        jobDescription: '',
+        jobId: null,
+        mockSessionId: null,
+    };
+
+    function showStatus(message) {
+        status.hidden = false;
+        status.textContent = message;
+    }
+
+    function selectFromGroup(groupId, dataKey, stateKey) {
+        const group = document.getElementById(groupId);
+        if (!group) return;
+        group.addEventListener('click', event => {
+            const button = event.target.closest('[data-' + dataKey + ']');
+            if (!button) return;
+            group.querySelectorAll('.segmented-btn, .category-card').forEach(item => {
+                item.classList.remove('active');
+                item.setAttribute('aria-checked', 'false');
+            });
+            button.classList.add('active');
+            button.setAttribute('aria-checked', 'true');
+            const value = button.dataset[dataKey];
+            state[stateKey] = dataKey === 'count' ? Number(value) : value;
+        });
+    }
+
+    // Target source toggle: the two options are only ways to provide a target.
+    document.querySelectorAll('.target-toggle-btn').forEach(button => {
+        button.addEventListener('click', () => {
+            document.querySelectorAll('.target-toggle-btn').forEach(item => {
+                item.classList.remove('active');
+                item.setAttribute('aria-selected', 'false');
+            });
+            button.classList.add('active');
+            button.setAttribute('aria-selected', 'true');
+            const source = button.dataset.source;
+            rolePanel.hidden = source !== 'role';
+            customPanel.hidden = source !== 'custom';
+        });
+    });
+
+    roleSelect.addEventListener('change', function () {
+        const custom = roleSelect.value === 'custom';
+        customRole.hidden = !custom;
+        customRole.required = custom;
+    });
+
+    selectFromGroup('category-grid', 'category', 'category');
+    selectFromGroup('difficulty-group', 'difficulty', 'difficulty');
+    selectFromGroup('count-group', 'count', 'count');
+
+    function resolvedTargetRole() {
+        if (roleSelect.value === 'custom') return customRole.value.trim();
+        return roleSelect.value;
+    }
+
+    function currentJobPayload() {
+        return {
+            company: companyInput.value.trim(),
+            job_description: jdInput.value.trim(),
+        };
+    }
+
+    function basePayload() {
+        return {
+            target_role: resolvedTargetRole(),
+            category: state.category,
+            difficulty: state.difficulty,
+            count: state.count,
+            focus_areas: focusInput.value.trim(),
+        };
+    }
+
+    function postJSON(url, payload) {
+        return fetch(url, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        }).then(async response => {
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                throw new Error(data.error || 'Request failed with status ' + response.status + '.');
+            }
+            return data;
+        });
+    }
+
+    const CATEGORY_LABELS = {{ category_labels|tojson }};
+    const DIFFICULTY_LABELS = {{ difficulty_labels|tojson }};
+
+    function addText(parent, tag, value, className) {
+        const element = document.createElement(tag);
+        if (className) element.className = className;
+        element.textContent = value == null ? '' : String(value);
+        parent.appendChild(element);
+        return element;
+    }
+
+    function renderList(elementId, values) {
+        const list = document.getElementById(elementId);
+        list.replaceChildren();
+        (Array.isArray(values) ? values : []).forEach(value => addText(list, 'li', value));
+        if (!list.childNodes.length) addText(list, 'li', 'Not recorded', 'muted');
+    }
+
+    function startSession(mode) {
+        state.mode = mode;
+        if (!resolvedTargetRole()) {
+            showStatus('Enter a target role first.');
+            return;
+        }
+        const buttons = [document.getElementById('start-practice'), document.getElementById('start-mock')];
+        buttons.forEach(button => { button.disabled = true; });
+        showStatus(mode === 'mock'
+            ? 'Preparing your mock interview questions…'
+            : 'Preparing your practice questions…');
+
+        const payload = Object.assign(basePayload(), currentJobPayload());
+        const explicitJobId = form.dataset.explicitJobId;
+        if (explicitJobId) payload.job_id = explicitJobId;
+
+        postJSON('{{ url_for("interview.generate") }}', payload)
+            .then(data => {
+                state.questions = Array.isArray(data.questions) ? data.questions : [];
+                state.questionIds = Array.isArray(data.question_ids) ? data.question_ids : [];
+                state.index = 0;
+                state.results = [];
+                state.targetRole = data.target_role || '';
+                state.company = data.company || '';
+                state.jobId = data.job ? data.job.job_id : null;
+                state.jobDescription = payload.job_description;
+                state.mockSessionId = null;
+                if (!state.questions.length) {
+                    showStatus('No questions could be generated. Try a different category.');
+                    return;
+                }
+                summaryPanel.hidden = true;
+                sessionPanel.hidden = false;
+                document.getElementById('session-title').textContent =
+                    mode === 'mock' ? 'Mock Interview' : 'Practice Session';
+                document.getElementById('session-meta').textContent =
+                    [state.targetRole, data.category_label, data.difficulty_label, data.company || data.job && data.job.company]
+                        .filter(Boolean).join(' · ');
+                showStatus(data.used_fallback
+                    ? 'Questions generated from your verified profile data.'
+                    : 'Personalized questions generated and saved.');
+                if (mode === 'mock') openMockSession();
+                renderQuestion();
+                document.getElementById('session-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            })
+            .catch(error => showStatus(error.message || 'Interview preparation could not be started.'))
+            .finally(() => buttons.forEach(button => { button.disabled = false; }));
+    }
+
+    // Interview History reuses the existing mock_interview_* tables, so a
+    // session is opened up front and closed when the last question is done.
+    function openMockSession() {
+        return postJSON('{{ url_for("interview.mock_start") }}', { job_id: state.jobId })
+            .then(data => { state.mockSessionId = data.session_id; })
+            .catch(() => { state.mockSessionId = null; });
+    }
+
+    function persistMockRecord(questionId, answer, feedback, score) {
+        if (!state.mockSessionId || !questionId) return Promise.resolve();
+        return postJSON('{{ url_for("interview.mock_answer") }}', {
+            session_id: state.mockSessionId,
+            question_id: questionId,
+            answer: answer,
+            feedback: feedback,
+            score: score,
+        }).catch(() => null);
+    }
+
+    function renderQuestion() {
+        const question = state.questions[state.index];
+        if (!question) return;
+        const isMock = state.mode === 'mock';
+        // Previous/Next belong to Practice Session only. Mock Interview moves
+        // forward through Submit Answer and Skip.
+        document.getElementById('practice-nav').hidden = isMock;
+        document.getElementById('question-text').textContent = question.question || '';
+        document.getElementById('question-category-tag').textContent =
+            CATEGORY_LABELS[question.category] || 'Interview';
+        document.getElementById('question-difficulty-tag').textContent =
+            question.difficulty_label || DIFFICULTY_LABELS[question.difficulty] || '';
+        document.getElementById('practice-answer-area').hidden = isMock;
+        document.getElementById('mock-answer-area').hidden = !isMock;
+        document.getElementById('feedback-area').hidden = true;
+        document.getElementById('tip-text').hidden = true;
+        document.getElementById('mock-answer').value = '';
+        document.getElementById('practice-answer').hidden = true;
+        const answered = state.results[state.index];
+        if (answered && answered.feedback) renderFeedback(answered.feedback);
+        updateProgress();
+    }
+
+    function updateProgress() {
+        const total = state.questions.length;
+        const current = state.index + 1;
+        document.getElementById('session-progress').textContent =
+            'Question ' + current + ' of ' + total;
+        document.getElementById('progress-fill').style.width =
+            (total ? (current / total) * 100 : 0) + '%';
+        if (state.mode !== 'mock') {
+            document.getElementById('prev-question').disabled = state.index === 0;
+            document.getElementById('next-question').disabled = state.index >= total - 1;
+        }
+    }
+
+    function goToQuestion(nextIndex) {
+        if (nextIndex < 0 || nextIndex >= state.questions.length) return;
+        state.index = nextIndex;
+        renderQuestion();
+    }
+
+    function showAnswer() {
+        const question = state.questions[state.index];
+        if (!question) return;
+        document.getElementById('suggested-answer').textContent =
+            question.answer || 'No suggested answer was recorded for this question.';
+        const howTo = document.getElementById('how-to-answer');
+        howTo.replaceChildren();
+        // The model returns the steps either one per line or inline as
+        // "1. ... 2. ... 3. ...", so split on both.
+        String(question.how_to_answer || '')
+            .replace(/\r\n/g, '\n')
+            .split(/\n|(?=\s\d+[.)]\s)/)
+            .map(line => line.replace(/^\s*\d+[.)]\s*/, '').trim())
+            .filter(Boolean)
+            .forEach(line => addText(howTo, 'li', line));
+        document.getElementById('practice-answer').hidden = false;
+    }
+
+    function renderFeedback(feedback) {
+        renderList('feedback-well', feedback.did_well);
+        renderList('feedback-improve', feedback.improve);
+        document.getElementById('feedback-suggested').textContent = feedback.suggested_answer || '';
+        document.getElementById('feedback-guidance').textContent = feedback.how_to_improve || '';
+        document.getElementById('feedback-area').hidden = false;
+    }
+
+    function recordResult(entry) {
+        state.results[state.index] = Object.assign(
+            { preparation_area: (state.questions[state.index] || {}).preparation_area || '' },
+            state.results[state.index] || {},
+            entry
+        );
+    }
+
+    function submitAnswer() {
+        const question = state.questions[state.index];
+        const answer = document.getElementById('mock-answer').value.trim();
+        if (!question) return;
+        if (!answer) {
+            showStatus('Type an answer before submitting, or use Skip.');
+            return;
+        }
+        const button = document.getElementById('submit-answer');
+        button.disabled = true;
+        showStatus('Evaluating your answer…');
+        postJSON('{{ url_for("interview.evaluate") }}', Object.assign(basePayload(), currentJobPayload(), {
+            question: question.question,
+            answer: answer,
+        }))
+            .then(data => {
+                renderFeedback(data);
+                recordResult({ answer: answer, score: data.score, skipped: false, feedback: data });
+                // Saved for Interview History; this does not affect the
+                // evaluation or the feedback shown above.
+                persistMockRecord(state.questionIds[state.index], answer, data, data.score);
+                // The evaluation is unchanged; Mock Interview simply advances
+                // once the answer has been evaluated. The feedback stays on the
+                // final Question-by-Question Review.
+                showStatus('Answer evaluated. Moving to the next question.');
+                if (state.index < state.questions.length - 1) {
+                    goToQuestion(state.index + 1);
+                } else {
+                    finishSession();
+                }
+            })
+            .catch(error => showStatus(error.message || 'Your answer could not be evaluated.'))
+            .finally(() => { button.disabled = false; });
+    }
+
+    function showTip() {
+        const question = state.questions[state.index];
+        if (!question) return;
+        const button = document.getElementById('show-tip');
+        button.disabled = true;
+        postJSON('{{ url_for("interview.tip") }}', Object.assign(basePayload(), currentJobPayload(), {
+            question: question.question,
+        }))
+            .then(data => {
+                const tip = document.getElementById('tip-text');
+                tip.textContent = data.tip;
+                tip.hidden = false;
+            })
+            .catch(error => showStatus(error.message || 'A tip could not be generated.'))
+            .finally(() => { button.disabled = false; });
+    }
+
+    function skipQuestion() {
+        const question = state.questions[state.index];
+        if (!question) return;
+        const existing = state.results[state.index];
+        const alreadyAnswered = existing && !existing.skipped && existing.answer;
+
+        if (alreadyAnswered) {
+            // The answer was already submitted and evaluated. Skip must not
+            // discard it, so this is just the forward control here.
+            showStatus('Moving to the next question.');
+        } else {
+            recordResult({ answer: '', score: null, skipped: true, feedback: null });
+            persistMockRecord(state.questionIds[state.index], '', null, null);
+            showStatus('Question skipped.');
+        }
+        if (state.index < state.questions.length - 1) {
+            state.index += 1;
+            renderQuestion();
+        } else {
+            finishSession();
+        }
+    }
+
+    function renderReview() {
+        const container = document.getElementById('review-list');
+        container.replaceChildren();
+        const rows = state.questions.map((question, index) => {
+            const result = state.results[index] || {};
+            const feedback = result.feedback || {};
+            return { question: question, index: index, result: result, feedback: feedback };
+        });
+        if (!rows.length) {
+            addText(container, 'p', 'No questions were recorded.', 'muted');
+            return;
+        }
+        rows.forEach(function (row) {
+            const card = document.createElement('article');
+            card.className = 'review-card';
+            addText(card, 'p', 'Question ' + (row.index + 1) + ' of ' + state.questions.length, 'muted');
+            addText(card, 'h4', row.question.question || '');
+            addText(card, 'p', [row.question.category, row.question.difficulty]
+                .filter(Boolean).map(labelText).join(' · '), 'muted');
+
+            if (row.result.skipped) {
+                addText(card, 'h5', 'Skipped');
+                addText(card, 'p', 'You skipped this question.', 'muted');
+                if (row.question.answer) {
+                    addText(card, 'h5', 'How You Could Answer This Question');
+                    addText(card, 'p', row.question.answer, 'answer-text');
+                }
+            } else {
+                addText(card, 'h5', 'Your Answer');
+                addText(card, 'p', row.result.answer || 'Not recorded', 'answer-text');
+
+                addText(card, 'h5', 'Feedback');
+                const well = document.createElement('ul');
+                (row.feedback.did_well || []).forEach(item => addText(well, 'li', item));
+                if (!well.childNodes.length) addText(well, 'li', 'Not recorded', 'muted');
+                card.appendChild(well);
+                const improve = document.createElement('ul');
+                (row.feedback.improve || []).forEach(item => addText(improve, 'li', item));
+                if (!improve.childNodes.length) addText(improve, 'li', 'Not recorded', 'muted');
+                card.appendChild(improve);
+
+                addText(card, 'h5', 'How to Improve');
+                addText(card, 'p', row.feedback.how_to_improve || 'Not recorded', 'answer-text');
+
+                addText(card, 'h5', 'Better Answer Approach');
+                addText(card, 'p', row.feedback.suggested_answer || 'Not recorded', 'answer-text');
+            }
+            container.appendChild(card);
+        });
+    }
+
+    function labelText(code) {
+        return CATEGORY_LABELS[code] || DIFFICULTY_LABELS[code] || code;
+    }
+
+    function finishSession() {
+        if (state.mode !== 'mock') {
+            endSession();
+            return;
+        }
+        showStatus('Building your practice summary…');
+        postJSON('{{ url_for("interview.summary") }}', {
+            target_role: state.targetRole,
+            results: state.results.filter(Boolean),
+        })
+            .then(data => {
+                const stats = document.getElementById('summary-stats');
+                stats.replaceChildren();
+                [
+                    ['Questions Attempted', data.questions_attempted],
+                    ['Questions Skipped', data.questions_skipped],
+                    ['Average Practice Score', data.average_score == null ? '—' : data.average_score],
+                ].forEach(pair => {
+                    const box = document.createElement('div');
+                    box.className = 'summary-stat';
+                    addText(box, 'span', pair[0], 'summary-stat-label');
+                    addText(box, 'strong', pair[1]);
+                    stats.appendChild(box);
+                });
+                document.getElementById('summary-performance').textContent = data.practice_performance || '';
+                const lists = document.getElementById('summary-lists');
+                lists.replaceChildren();
+                [
+                    ['Strong Areas', data.areas_performed_well],
+                    ['Areas to Improve', data.topics_to_improve],
+                    ['Recommended Preparation', data.recommended_topics],
+                    ['Topics Covered', data.topics_covered],
+                ].forEach(pair => {
+                    const block = document.createElement('div');
+                    block.className = 'summary-block';
+                    addText(block, 'h4', pair[0]);
+                    const list = document.createElement('ul');
+                    (Array.isArray(pair[1]) && pair[1].length ? pair[1] : ['Not recorded']).forEach(item => addText(list, 'li', item));
+                    block.appendChild(list);
+                    lists.appendChild(block);
+                });
+                renderReview();
+                sessionPanel.hidden = true;
+                summaryPanel.hidden = false;
+                summaryPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                closeMockSession();
+            })
+            .catch(error => showStatus(error.message || 'The summary could not be created.'));
+    }
+
+    function closeMockSession() {
+        if (!state.mockSessionId) return;
+        const sessionId = state.mockSessionId;
+        state.mockSessionId = null;
+        postJSON('{{ url_for("interview.mock_finish") }}', { session_id: sessionId })
+            .catch(() => null);
+    }
+
+    function endSession() {
+        if (state.mode === 'mock') closeMockSession();
+        sessionPanel.hidden = true;
+        summaryPanel.hidden = true;
+        document.getElementById('practice-nav').hidden = true;
+        state.questions = [];
+        state.results = [];
+        showStatus('Session ended.');
+    }
+
+    document.getElementById('start-practice').addEventListener('click', () => startSession('practice'));
+    document.getElementById('start-mock').addEventListener('click', () => startSession('mock'));
+    document.getElementById('show-answer').addEventListener('click', showAnswer);
+    document.getElementById('submit-answer').addEventListener('click', submitAnswer);
+    document.getElementById('show-tip').addEventListener('click', showTip);
+    document.getElementById('skip-question').addEventListener('click', skipQuestion);
+    document.getElementById('end-session').addEventListener('click', finishSession);
+    document.getElementById('prev-question').addEventListener('click', () => {
+        goToQuestion(state.index - 1);
+    });
+    document.getElementById('next-question').addEventListener('click', () => {
+        goToQuestion(state.index + 1);
+    });
+    document.getElementById('restart-session').addEventListener('click', () => {
+        summaryPanel.hidden = true;
+        sessionPanel.hidden = false;
+        state.index = 0;
+        state.results = [];
+        renderQuestion();
+    });
+
+    // ---- Saved Preparation / Recent Preparation / Interview History ----
+    function bindToggle(buttonId, panelId, onOpen) {
+        const button = document.getElementById(buttonId);
+        const panel = document.getElementById(panelId);
+        button.addEventListener('click', () => {
+            const willOpen = panel.hidden;
+            panel.hidden = !willOpen;
+            button.classList.toggle('active', willOpen);
+            button.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+            if (willOpen && typeof onOpen === 'function') onOpen();
+        });
+    }
+
+    function formatDate(value) {
+        if (!value) return '—';
+        const date = new Date(value);
+        if (isNaN(date.getTime())) return String(value);
+        return date.toLocaleString(undefined, {
+            year: 'numeric', month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit',
+        });
+    }
+
+    function loadHistory() {
+        const list = document.getElementById('history-list');
+        const detail = document.getElementById('history-detail');
+        list.replaceChildren();
+        detail.hidden = true;
+        detail.replaceChildren();
+        addText(list, 'p', 'Loading interview history…', 'muted');
+        return fetch('{{ url_for("interview.mock_history") }}', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+            .then(response => response.json())
+            .then(data => {
+                list.replaceChildren();
+                if (!data.success || !Array.isArray(data.sessions) || !data.sessions.length) {
+                    addText(list, 'p', 'No completed mock interviews yet.', 'muted');
+                    return;
+                }
+                data.sessions.forEach(function (session) {
+                    const card = document.createElement('button');
+                    card.type = 'button';
+                    card.className = 'history-card';
+                    const head = document.createElement('div');
+                    head.className = 'history-card-head';
+                    addText(head, 'strong', session.role || 'Interview');
+                    addText(head, 'span', formatDate(session.ended_at || session.started_at), 'muted');
+                    card.appendChild(head);
+                    const stats = document.createElement('div');
+                    stats.className = 'history-card-stats';
+                    [
+                        'Questions: ' + session.total_questions,
+                        'Answered: ' + session.answered,
+                        'Skipped: ' + session.skipped,
+                    ].forEach(label => addText(stats, 'span', label));
+                    card.appendChild(stats);
+                    addText(card, 'p', session.overall_result || '', 'history-card-result');
+                    card.addEventListener('click', () => openHistoryDetail(session.session_id));
+                    list.appendChild(card);
+                });
+            })
+            .catch(() => {
+                list.replaceChildren();
+                addText(list, 'p', 'Interview history could not be loaded.', 'muted');
+            });
+    }
+
+    function openHistoryDetail(sessionId) {
+        const detail = document.getElementById('history-detail');
+        detail.replaceChildren();
+        addText(detail, 'p', 'Loading review…', 'muted');
+        detail.hidden = false;
+        const url = detail.dataset.urlTemplate.replace(/0$/, String(sessionId));
+        return fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+            .then(response => response.json())
+            .then(data => {
+                detail.replaceChildren();
+                if (!data.success || !data.session) {
+                    addText(detail, 'p', 'That interview could not be opened.', 'muted');
+                    return;
+                }
+                const session = data.session;
+                addText(detail, 'h4', (session.role || 'Interview') + ' review');
+                addText(detail, 'p', formatDate(session.started_at) + ' · ' + (session.overall_result || ''), 'muted');
+
+                const items = Array.isArray(session.items) ? session.items : [];
+                if (!items.length) {
+                    addText(detail, 'p', 'No questions were recorded for this interview.', 'muted');
+                    return;
+                }
+                items.forEach(function (item, index) {
+                    const card = document.createElement('article');
+                    card.className = 'review-card';
+                    addText(card, 'p', 'Question ' + (index + 1), 'muted');
+                    addText(card, 'h4', item.question || '');
+                    if (item.skipped) {
+                        addText(card, 'h5', 'Skipped');
+                        addText(card, 'p', 'You skipped this question.', 'muted');
+                        if (item.suggested_answer) {
+                            addText(card, 'h5', 'How You Could Answer This Question');
+                            addText(card, 'p', item.suggested_answer, 'answer-text');
+                        }
+                    } else {
+                        addText(card, 'h5', 'Your Answer');
+                        addText(card, 'p', item.student_answer || 'Not recorded', 'answer-text');
+                        addText(card, 'h5', 'Feedback');
+                        [item.did_well, item.improve].forEach(function (values) {
+                            const listEl = document.createElement('ul');
+                            (Array.isArray(values) && values.length ? values : ['Not recorded'])
+                                .forEach(value => addText(listEl, 'li', value));
+                            card.appendChild(listEl);
+                        });
+                        addText(card, 'h5', 'How to Improve');
+                        addText(card, 'p', item.how_to_improve || 'Not recorded', 'answer-text');
+                        addText(card, 'h5', 'Better Answer Approach');
+                        addText(card, 'p', item.better_answer || 'Not recorded', 'answer-text');
+                    }
+                    detail.appendChild(card);
+                });
+            })
+            .catch(() => {
+                detail.replaceChildren();
+                addText(detail, 'p', 'That interview could not be opened.', 'muted');
+            });
+    }
+
+    bindToggle('toggle-saved', 'saved-panel');
+    bindToggle('toggle-recent', 'recent-panel');
+    bindToggle('toggle-history', 'history-panel', loadHistory);
+
+    form.addEventListener('submit', event => event.preventDefault());
+}());
+</script>
 {% endblock %}

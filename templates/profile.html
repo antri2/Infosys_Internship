@@ -1,6 +1,106 @@
 {% extends "app_shell.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}My Profile - CareerAI{% endblock %}
 {% block app_content %}
+
+{% macro section_head(title, count) %}
+<div class="dash-card-head">
+    <h3>{{ title }}</h3>
+    <span class="muted">{{ count }} saved</span>
+</div>
+{% endmacro %}
+
+{% macro record_form(action, anchor, record_type, record=None) %}
+<form method="POST" action="{{ url_for(action) }}" class="profile-form" style="border:none;padding:0">
+    <input type="hidden" name="record_type" value="{{ record_type }}">
+    {% if record %}<input type="hidden" name="record_id" value="{{ record.id }}">{% endif %}
+    {% if record_type == 'education' %}
+        <div class="form-grid">
+            <div>
+                <label>Institution <span style="color:var(--danger,#c0392b)">*</span></label>
+                <input type="text" name="institution" value="{{ record.institution if record else '' }}">
+            </div>
+            <div>
+                <label>Degree</label>
+                <input type="text" name="degree" value="{{ record.degree if record else '' }}">
+            </div>
+            <div>
+                <label>Field of study</label>
+                <input type="text" name="field" value="{{ record.field if record else '' }}">
+            </div>
+            <div>
+                <label>Start / End</label>
+                <div style="display:flex;gap:8px">
+                    <input type="text" name="start_date" placeholder="2023" value="{{ record.start_date if record else '' }}">
+                    <input type="text" name="end_date" placeholder="2026" value="{{ record.end_date if record else '' }}">
+                </div>
+            </div>
+        </div>
+    {% elif record_type == 'experience' %}
+        <div class="form-grid">
+            <div>
+                <label>Title <span style="color:var(--danger,#c0392b)">*</span></label>
+                <input type="text" name="title" value="{{ record.title if record else '' }}">
+            </div>
+            <div>
+                <label>Organization</label>
+                <input type="text" name="organization" value="{{ record.organization if record else '' }}">
+            </div>
+            <div>
+                <label>Start</label>
+                <input type="text" name="start_date" placeholder="Aug 2026" value="{{ record.start_date if record else '' }}">
+            </div>
+            <div>
+                <label>End</label>
+                <input type="text" name="end_date" placeholder="Present" value="{{ record.end_date if record else '' }}">
+            </div>
+        </div>
+        <label>Description</label>
+        <textarea name="description" rows="4" placeholder="One responsibility or achievement per line">{{ record.description if record else '' }}</textarea>
+    {% elif record_type == 'projects' %}
+        <label>Project name <span style="color:var(--danger,#c0392b)">*</span></label>
+        <input type="text" name="title" value="{{ record.title if record else '' }}">
+        <label>Description</label>
+        <textarea name="description" rows="3">{{ record.description if record else '' }}</textarea>
+        <label>Technologies (comma separated)</label>
+        <input type="text" name="tech_stack" value="{{ record.tech_stack if record else '' }}">
+    {% elif record_type == 'certifications' %}
+        <div class="form-grid">
+            <div>
+                <label>Certification name <span style="color:var(--danger,#c0392b)">*</span></label>
+                <input type="text" name="name" value="{{ record.name if record else '' }}">
+            </div>
+            <div>
+                <label>Issuer</label>
+                <input type="text" name="issuer" value="{{ record.issuer if record else '' }}">
+            </div>
+            <div>
+                <label>Issued</label>
+                <input type="text" name="issue_date" value="{{ record.issue_date if record else '' }}">
+            </div>
+            <div>
+                <label>Expires</label>
+                <input type="text" name="expiry_date" value="{{ record.expiry_date if record else '' }}">
+            </div>
+        </div>
+        <label>Credential URL</label>
+        <input type="text" name="credential_url" value="{{ record.credential_url if record else '' }}">
+    {% endif %}
+    <div style="display:flex;gap:8px;margin-top:14px">
+        <button type="submit" class="btn btn-primary">{{ 'Save Changes' if record else 'Add' }}</button>
+        {% if record %}<a href="#{{ anchor }}" class="btn btn-outline">Cancel</a>{% endif %}
+    </div>
+</form>
+{% endmacro %}
+
+{% macro record_actions(record_type, record) %}
+<form method="POST" action="{{ url_for('profile.record_delete') }}" style="display:inline"
+      onsubmit="return confirm('Remove this entry?')">
+    <input type="hidden" name="record_type" value="{{ record_type }}">
+    <input type="hidden" name="record_id" value="{{ record.id }}">
+    <button type="submit" class="btn btn-outline" style="padding:5px 10px;font-size:12px">Delete</button>
+</form>
+{% endmacro %}
 
 <div class="profile-header">
     <span class="profile-avatar-lg">{{ (user.name or 'U')[0] | upper }}</span>
@@ -8,88 +108,301 @@
         <h2>{{ user.name }}</h2>
         <p>{{ user.email }}{% if user.phone %} &middot; {{ user.phone }}{% endif %} &middot; {{ user.career_status }}</p>
     </div>
+    <div style="margin-left:auto;text-align:right">
+        <div style="font-size:20px;font-weight:700;color:var(--primary)">{{ completeness }}%</div>
+        <div class="muted">profile complete</div>
+    </div>
 </div>
 
 <div class="dash-grid">
     <div class="dash-col">
-        <div class="dash-card">
-            <div class="dash-card-head"><h3>Edit Your Details</h3></div>
-            <form method="POST" action="{{ url_for('profile.edit') }}" class="profile-form" style="border:none;padding:0">
-                <div class="form-grid">
-                    <div>
-                        <label for="college">College Name</label>
-                        <input type="text" id="college" name="college" value="{{ profile.college or '' }}">
-                    </div>
-                    <div>
-                        <label for="degree">Degree / Course</label>
-                        <input type="text" id="degree" name="degree" value="{{ profile.degree or '' }}">
-                    </div>
-                    <div>
-                        <label for="passing_year">Passing Year</label>
-                        <input type="number" id="passing_year" name="passing_year" value="{{ profile.passing_year or '' }}">
-                    </div>
-                    <div>
-                        <label for="cgpa">CGPA</label>
-                        <input type="number" step="0.01" id="cgpa" name="cgpa" value="{{ profile.cgpa or '' }}">
-                    </div>
-                </div>
 
-                <label for="skills">Key Skills (comma separated)</label>
-                <input type="text" id="skills" name="skills"
-                       value="{{ profile.skills | map(attribute='name') | join(', ') }}">
+        <!-- ================= Personal Information ================= -->
+        <div class="dash-card" id="personal">
+            {{ section_head('Personal Information', '') }}
+            <div class="tag-row" style="margin-bottom:14px">
+                <span class="tag">{{ user.name }}</span>
+                {% if user.phone %}<span class="tag">{{ user.phone }}</span>{% endif %}
+                <span class="tag">{{ user.career_status }}</span>
+                <span class="tag">{{ user.email }}</span>
+            </div>
 
-                <label for="experience">Experience / Projects</label>
-                <textarea id="experience" name="experience" rows="4">{{ profile.experience or '' }}</textarea>
+            {% if profile.summary %}
+                <label style="font-size:12.5px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">Summary (extracted by the Resume Parser)</label>
+                <p style="font-size:13.5px;line-height:1.6;margin:0 0 4px">{{ profile.summary }}</p>
+            {% endif %}
 
-                <button type="submit" class="btn btn-primary" style="margin-top:16px">Save Changes</button>
-            </form>
+            <p class="muted" style="margin-top:10px">
+                Email is your sign-in identity and cannot be changed here.
+            </p>
+
+            <details style="margin-top:14px">
+                <summary style="cursor:pointer;font-size:13.5px;font-weight:600;color:var(--primary)">Edit personal details</summary>
+                <form method="POST" action="{{ url_for('profile.edit') }}" class="profile-form" style="border:none;padding:0">
+                    <div class="form-grid">
+                        <div>
+                            <label for="p-name">Full name</label>
+                            <input type="text" id="p-name" name="name" value="{{ user.name or '' }}">
+                        </div>
+                        <div>
+                            <label for="p-phone">Phone</label>
+                            <input type="text" id="p-phone" name="phone" value="{{ user.phone or '' }}">
+                        </div>
+                        <div>
+                            <label for="p-status">Experience level</label>
+                            <select id="p-status" name="career_status">
+                                {% for status in career_statuses %}
+                                <option value="{{ status }}" {% if user.career_status == status %}selected{% endif %}>{{ status }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label for="p-email">Email (read-only)</label>
+                            <input type="text" id="p-email" value="{{ user.email or '' }}" disabled>
+                        </div>
+                    </div>
+
+                    <label for="p-summary">Professional summary / headline</label>
+                    <textarea id="p-summary" name="summary" rows="3" placeholder="One or two sentences about you">{{ profile.summary or '' }}</textarea>
+
+                    <div class="form-grid">
+                        <div>
+                            <label for="p-college">College name</label>
+                            <input type="text" id="p-college" name="college" value="{{ profile.college or '' }}">
+                        </div>
+                        <div>
+                            <label for="p-degree">Degree / course</label>
+                            <input type="text" id="p-degree" name="degree" value="{{ profile.degree or '' }}">
+                        </div>
+                        <div>
+                            <label for="p-year">Passing year</label>
+                            <input type="number" id="p-year" name="passing_year" value="{{ profile.passing_year or '' }}">
+                        </div>
+                        <div>
+                            <label for="p-cgpa">CGPA</label>
+                            <input type="number" step="0.01" id="p-cgpa" name="cgpa" value="{{ profile.cgpa or '' }}">
+                        </div>
+                    </div>
+
+                    <label for="p-notes">Additional notes</label>
+                    <textarea id="p-notes" name="experience" rows="3">{{ profile.experience or '' }}</textarea>
+
+                    <button type="submit" class="btn btn-primary" style="margin-top:16px">Save Changes</button>
+                </form>
+            </details>
         </div>
 
-        <div class="dash-card">
-            <div class="dash-card-head"><h3> Education (from resume)</h3></div>
+        <!-- ================= Education ================= -->
+        <div class="dash-card" id="education">
+            {{ section_head('Education', profile.education | length) }}
+            {% if profile.cgpa %}<p class="muted" style="margin:-8px 0 12px">CGPA: {{ profile.cgpa }}</p>{% endif %}
             {% if profile.education %}
                 {% for e in profile.education %}
-                    <p style="font-size:13.5px;margin:0 0 8px">
-                        <b>{{ e.degree }}</b> &mdash; {{ e.institution }} ({{ e.start_date }} - {{ e.end_date }})
-                    </p>
+                <div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">
+                    <b style="font-size:14px">{{ e.degree or e.institution }}{% if e.degree and e.institution %} &mdash; {{ e.institution }}{% endif %}</b>
+                    {% if e.field %}<div class="muted" style="margin-top:2px">{{ e.field }}</div>{% endif %}
+                    {% if e.start_date or e.end_date %}
+                        <div class="muted" style="margin-top:2px">{{ e.start_date or '?' }} &ndash; {{ e.end_date or '?' }}</div>
+                    {% endif %}
+                    <details style="margin-top:8px">
+                        <summary style="cursor:pointer;font-size:12.5px;color:var(--primary)">Edit</summary>
+                        {{ record_form('profile.record_update', 'education', 'education', e) }}
+                        <div style="margin-top:10px">{{ record_actions('education', e) }}</div>
+                    </details>
+                </div>
                 {% endfor %}
-            {% else %}<p class="muted">Not extracted yet.</p>{% endif %}
+            {% else %}<p class="muted">No education saved yet.</p>{% endif %}
+
+            <details style="margin-top:6px">
+                <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--primary)">+ Add Education</summary>
+                <div style="margin-top:12px">{{ record_form('profile.record_add', 'education', 'education') }}</div>
+            </details>
         </div>
 
-        <div class="dash-card">
-            <div class="dash-card-head"><h3> Experience (from resume)</h3></div>
+        <!-- ================= Experience ================= -->
+        <div class="dash-card" id="experience">
+            {{ section_head('Experience', profile.experience_list | length) }}
             {% if profile.experience_list %}
                 {% for x in profile.experience_list %}
-                    <p style="font-size:13.5px;margin:0 0 8px">
-                        <b>{{ x.title }}</b> &mdash; {{ x.organization }} ({{ x.start_date }} - {{ x.end_date }})
-                    </p>
+                <div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">
+                    <b style="font-size:14px">{{ x.title }}</b>
+                    {% if x.organization %}<span class="muted"> &mdash; {{ x.organization }}</span>{% endif %}
+                    {% if x.start_date or x.end_date %}
+                        <div class="muted" style="margin-top:2px">{{ x.start_date or '?' }} &ndash; {{ x.end_date or '?' }}</div>
+                    {% endif %}
+                    {% if x.description %}
+                        <div style="font-size:13px;line-height:1.6;margin-top:6px;white-space:pre-line">{{ x.description }}</div>
+                    {% endif %}
+                    <details style="margin-top:8px">
+                        <summary style="cursor:pointer;font-size:12.5px;color:var(--primary)">Edit</summary>
+                        {{ record_form('profile.record_update', 'experience', 'experience', x) }}
+                        <div style="margin-top:10px">{{ record_actions('experience', x) }}</div>
+                    </details>
+                </div>
                 {% endfor %}
-            {% else %}<p class="muted">Not extracted yet.</p>{% endif %}
+            {% else %}<p class="muted">No experience saved yet.</p>{% endif %}
+
+            <details style="margin-top:6px">
+                <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--primary)">+ Add Experience</summary>
+                <div style="margin-top:12px">{{ record_form('profile.record_add', 'experience', 'experience') }}</div>
+            </details>
+        </div>
+
+        <!-- ================= Projects ================= -->
+        <div class="dash-card" id="projects">
+            {{ section_head('Projects', profile.projects | length) }}
+            {% if profile.projects %}
+                {% for p in profile.projects %}
+                <div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">
+                    <b style="font-size:14px">{{ p.title }}</b>
+                    {% if p.description %}
+                        <div style="font-size:13px;line-height:1.6;margin-top:6px;white-space:pre-line">{{ p.description }}</div>
+                    {% endif %}
+                    {% if p.tech_stack %}
+                        <div class="tag-row" style="margin-top:8px">
+                            {% for tech in p.tech_stack.split(',') if p.tech_stack.strip() %}
+                            <span class="tag">{{ tech.strip() }}</span>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <details style="margin-top:8px">
+                        <summary style="cursor:pointer;font-size:12.5px;color:var(--primary)">Edit</summary>
+                        {{ record_form('profile.record_update', 'projects', 'projects', p) }}
+                        <div style="margin-top:10px">{{ record_actions('projects', p) }}</div>
+                    </details>
+                </div>
+                {% endfor %}
+            {% else %}<p class="muted">No projects saved yet.</p>{% endif %}
+
+            <details style="margin-top:6px">
+                <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--primary)">+ Add Project</summary>
+                <div style="margin-top:12px">{{ record_form('profile.record_add', 'projects', 'projects') }}</div>
+            </details>
         </div>
     </div>
 
     <div class="dash-col">
+        <!-- ================= Skills ================= -->
+        <div class="dash-card" id="skills">
+            {{ section_head('Skills', profile.skills | length) }}
+            {% if profile.skills %}
+                <div class="tag-row" style="margin-bottom:12px">
+                    {% for s in profile.skills %}
+                    <span class="tag" title="{{ s.category or 'no category' }}">{{ s.name }}</span>
+                    {% endfor %}
+                </div>
+                <details>
+                    <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--primary)">Edit or remove skills</summary>
+                    <div style="margin-top:12px">
+                        {% for s in profile.skills %}
+                        <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+                            <span style="flex:1;font-size:13.5px">{{ s.name }}</span>
+                            <span class="muted" style="font-size:11.5px">{{ (s.category or 'other') | replace('_', ' ') }}</span>
+                            <button type="button" class="btn btn-outline" style="padding:4px 9px;font-size:12px"
+                                    onclick="toggleSkillRow({{ s.id }})">Edit</button>
+                            <form method="POST" action="{{ url_for('profile.skill_delete') }}" style="display:inline"
+                                  onsubmit="return confirm('Remove {{ s.name }}?')">
+                                <input type="hidden" name="skill_id" value="{{ s.id }}">
+                                <button type="submit" class="btn btn-outline" style="padding:4px 9px;font-size:12px">Delete</button>
+                            </form>
+                            <form method="POST" action="{{ url_for('profile.skill_update') }}" id="skill-row-{{ s.id }}" style="display:none;width:100%">
+                                <input type="hidden" name="skill_id" value="{{ s.id }}">
+                                <div style="display:flex;gap:8px;margin-top:8px">
+                                    <input type="text" name="name" value="{{ s.name }}" style="flex:1">
+                                    <select name="category">
+                                        <option value="">Keep category</option>
+                                        {% for cat in skill_categories %}
+                                        <option value="{{ cat }}" {% if s.category == cat %}selected{% endif %}>{{ cat | replace('_', ' ') }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="submit" class="btn btn-primary" style="padding:5px 12px;font-size:12px">Save</button>
+                                </div>
+                            </form>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </details>
+            {% else %}<p class="muted">No skills saved yet.</p>{% endif %}
+
+            <details style="margin-top:10px">
+                <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--primary)">+ Add Skills</summary>
+                <form method="POST" action="{{ url_for('profile.skill_add') }}" class="profile-form" style="border:none;padding:0;margin-top:12px">
+                    <label for="new-skills">Skill names (comma separated)</label>
+                    <input type="text" id="new-skills" name="skills" placeholder="Python, SQL, PyTorch">
+                    <label for="new-skill-category">Category</label>
+                    <select id="new-skill-category" name="category">
+                        <option value="">No category</option>
+                        {% for cat in skill_categories %}
+                        <option value="{{ cat }}">{{ cat | replace('_', ' ') }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-primary" style="margin-top:12px">Add Skills</button>
+                </form>
+            </details>
+        </div>
+
+        <!-- ================= Certifications ================= -->
+        <div class="dash-card" id="certifications">
+            {{ section_head('Certifications', profile.certifications | length) }}
+            {% if profile.certifications %}
+                {% for c in profile.certifications %}
+                <div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">
+                    <b style="font-size:14px">{{ c.name }}</b>
+                    {% if c.issuer %}<span class="muted"> &mdash; {{ c.issuer }}</span>{% endif %}
+                    {% if c.issue_date or c.expiry_date %}
+                        <div class="muted" style="margin-top:2px">
+                            {% if c.issue_date %}Issued {{ c.issue_date }}{% endif %}
+                            {% if c.expiry_date %} &middot; Expires {{ c.expiry_date }}{% endif %}
+                        </div>
+                    {% endif %}
+                    {% if c.credential_url %}
+                        <div style="margin-top:4px"><a href="{{ c.credential_url }}" target="_blank" rel="noopener noreferrer" style="font-size:12.5px;word-break:break-all">Credential link</a></div>
+                    {% endif %}
+                    <details style="margin-top:8px">
+                        <summary style="cursor:pointer;font-size:12.5px;color:var(--primary)">Edit</summary>
+                        {{ record_form('profile.record_update', 'certifications', 'certifications', c) }}
+                        <div style="margin-top:10px">{{ record_actions('certifications', c) }}</div>
+                    </details>
+                </div>
+                {% endfor %}
+            {% else %}<p class="muted">No certifications saved yet.</p>{% endif %}
+
+            <details style="margin-top:6px">
+                <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--primary)">+ Add Certification</summary>
+                <div style="margin-top:12px">{{ record_form('profile.record_add', 'certifications', 'certifications') }}</div>
+            </details>
+        </div>
+
+        <!-- ================= Resume ================= -->
         <div class="dash-card">
             <div class="dash-card-head"><h3> Resume</h3></div>
             <div class="resume-replace-box">
-                <div style="font-size:26px">📎</div>
+                <div style="font-size:26px">&#128206;</div>
                 <p><b>Uploading a new resume replaces your current one</b><br>
-                   Your skills, education, and experience will be re-extracted automatically.</p>
+                   Your skills, education, experience, projects and certifications will be re-extracted automatically.</p>
                 <a href="{{ url_for('resume.upload') }}" class="btn btn-outline" style="margin-top:10px">Upload New Resume</a>
             </div>
         </div>
 
+        <!-- ================= Tips ================= -->
         <div class="dash-card">
             <div class="dash-card-head"><h3> Quick Tips to Improve Your Profile</h3></div>
             <div class="tip-list">
-                <div class="tip-item"><span class="tip-icon"></span> Keep your skills list specific — "React" and "Node.js" match better than "Web Development".</div>
-                <div class="tip-item"><span class="tip-icon"></span> Add measurable outcomes to your experience (e.g. "reduced load time by 30%").</div>
-                <div class="tip-item"><span class="tip-icon"></span> Re-upload your resume whenever you finish a new project or certification.</div>
-                <div class="tip-item"><span class="tip-icon"></span> Fill in your CGPA and passing year — many internship filters check for these.</div>
-                <div class="tip-item"><span class="tip-icon"></span> A complete profile (100%) shows up higher in recruiter searches.</div>
+                <div class="tip-item"><span class="tip-icon">{{ icon('check') }}</span> Keep your skills list specific &mdash; "React" and "Node.js" match better than "Web Development".</div>
+                <div class="tip-item"><span class="tip-icon">{{ icon('check') }}</span> Add measurable outcomes to your experience (e.g. "reduced load time by 30%").</div>
+                <div class="tip-item"><span class="tip-icon">{{ icon('check') }}</span> Re-upload your resume whenever you finish a new project or certification.</div>
+                <div class="tip-item"><span class="tip-icon">{{ icon('check') }}</span> Fill in your CGPA and passing year &mdash; many internship filters check for these.</div>
+                <div class="tip-item"><span class="tip-icon">{{ icon('check') }}</span> A complete profile (100%) shows up higher in recruiter searches.</div>
             </div>
         </div>
     </div>
 </div>
+
+<script>
+function toggleSkillRow(id) {
+    var row = document.getElementById('skill-row-' + id);
+    if (row) { row.style.display = row.style.display === 'none' ? 'block' : 'none'; }
+}
+</script>
 
 {% endblock %}

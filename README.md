@@ -1,44 +1,62 @@
 # CareerAI (Flask + MySQL + HTML/CSS/JS)
 
-## Setup
+CareerAI is a Flask/MySQL career and internship assistant for freshers and experienced users. It uses Groq for LLM features and FastEmbed with `BAAI/bge-small-en-v1.5` plus FAISS for semantic job retrieval.
 
-1. **MySQL**: create the database and run the schema.
-   ```bash
-   mysql -u root -p -e "CREATE DATABASE career_ai;"
-   mysql -u root -p career_ai < database/schema.sql
-   ```
+## Fresh setup
 
-2. **LLM (Hugging Face, local, no API key)**: nothing to install separately --
-   `transformers` downloads the model automatically on first resume upload.
-   Set `HF_MODEL_NAME` in `.env` if you want a different model than the
-   default (Qwen 2.5 1.5B Instruct).
-
-3. **Backend**
+1. **Create the virtual environment and install dependencies**
    ```bash
    python -m venv venv
-   source venv/bin/activate        # Windows: venv\Scripts\activate
+   source venv/bin/activate        # Windows PowerShell: venv\Scripts\Activate.ps1
    pip install -r requirements.txt
+   ```
 
-   cp .env.example .env
-   # edit .env: set your real MySQL credentials
+2. **Configure the environment**
+   ```bash
+   cp .env.example .env             # Windows: Copy-Item .env.example .env
+   ```
+   Set the MySQL credentials, a long random `SECRET_KEY`, and a valid `GROQ_API_KEY` in `.env`.
 
+3. **Initialize the database schema and M3 migration**
+   ```bash
+   python -c "from database.db import init_db; init_db()"
+   ```
+   This creates/updates the configured `MYSQL_DATABASE`. It does not load job data.
+
+4. **Explicitly synchronize the canonical 185-job dataset**
+   ```bash
+   python Data/Loads_jobs_to_dataset.py
+   ```
+   The command idempotently upserts `Data/jobs_clean.csv` into MySQL, verifies every canonical row, and validates the checked-in FAISS lookup/metadata/index. It is safe to run again after dataset changes and is not run on every Flask startup.
+
+5. **Start CareerAI**
+   ```bash
    python app.py
    ```
-   Runs at http://localhost:5000
+   Runs at `http://localhost:5000`.
 
-## File formats supported
+## Updating the demonstration dataset
 
-**PDF and DOCX only.** Enforced both in the browser (`accept=".pdf,.docx"`)
-and on the server (`config.ALLOWED_RESUME_TYPES`) -- anything else is
-rejected with a clear error before it reaches the parser.
+When `jobs_clean.csv` changes, rebuild the vector artifacts and then synchronize MySQL:
 
-## Tested against real MySQL
+```bash
+python Data/clean_dataset.py
+python -c "from services.rag_service import build_index; build_index()"
+python Data/Loads_jobs_to_dataset.py
+```
 
-Every route in this project was tested against an actual running MySQL 8.0
-instance (not SQLite, not mocked): register, duplicate-email rejection,
-login, wrong-password rejection, resume upload -> parse -> save (skills,
-education, experience all verified in their real tables), manual profile
-edit, and the mandatory-resume-upload redirect for new users. The only
-thing mocked in testing was the LLM call itself (to avoid a multi-GB model
-download in a test environment) -- everything else, including real PDF
-text extraction via PyMuPDF, ran for real.
+The CSV is the canonical source used to populate both MySQL and the FAISS lookup data.
+
+## Supported resume formats
+
+**PDF and DOCX only.** The browser accepts `.pdf,.docx`, and the server enforces the same extension allowlist with a 5 MB upload limit. Text-based documents are extracted with PyMuPDF and python-docx before structured parsing through Groq.
+
+## Project tests
+
+Run the focused Step 1 tests with:
+
+```bash
+pytest -q
+```
+
+The tests use the isolated `career_ai_step1_test` MySQL database and do not modify development data.

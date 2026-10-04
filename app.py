@@ -10,6 +10,9 @@ from routes.opportunities import opportunities_bp
 from routes.applications import applications_bp
 from routes.interview import interview_bp
 from routes.assistant import assistant_bp
+from routes.resume_builder import resume_builder_bp
+from routes.cover_letter import cover_letter_bp
+from routes.skill_gap import skill_gap_bp
 
 
 def create_app():
@@ -28,6 +31,9 @@ def create_app():
     app.register_blueprint(applications_bp)
     app.register_blueprint(interview_bp)
     app.register_blueprint(assistant_bp)
+    app.register_blueprint(resume_builder_bp)
+    app.register_blueprint(cover_letter_bp)
+    app.register_blueprint(skill_gap_bp)
 
     @app.route("/")
     def landing():

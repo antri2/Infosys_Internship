@@ -1,8 +1,3 @@
-CREATE DATABASE IF NOT EXISTS career_ai
-    CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
-USE career_ai;
-
 CREATE TABLE IF NOT EXISTS users (
     id              INT AUTO_INCREMENT PRIMARY KEY,
     name            VARCHAR(255) NOT NULL,
@@ -76,6 +71,19 @@ CREATE TABLE IF NOT EXISTS projects (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS certifications (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    user_id         INT NOT NULL,
+    name            VARCHAR(255) NOT NULL,
+    issuer          VARCHAR(255),
+    issue_date      VARCHAR(30),
+    expiry_date     VARCHAR(30),
+    credential_url  VARCHAR(500),
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
 CREATE TABLE IF NOT EXISTS jobs (
     job_id              INT PRIMARY KEY,
     title               VARCHAR(255) NOT NULL,
@@ -100,11 +108,13 @@ CREATE TABLE IF NOT EXISTS applications (
     id              INT AUTO_INCREMENT PRIMARY KEY,
     user_id         INT NOT NULL,
     job_id          INT NOT NULL,
+    resume_id       INT,
     status          ENUM('saved', 'applied', 'interview', 'under_review', 'rejected')
                         NOT NULL DEFAULT 'saved',
-    applied_on      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    applied_on      TIMESTAMP NULL DEFAULT NULL,
     updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uniq_user_job (user_id, job_id),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (job_id) REFERENCES jobs(job_id) ON DELETE CASCADE
+    FOREIGN KEY (job_id) REFERENCES jobs(job_id) ON DELETE CASCADE,
+    FOREIGN KEY (resume_id) REFERENCES resumes(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;

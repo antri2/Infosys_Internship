@@ -1,34 +1,46 @@
-"""
-Shared helper for anywhere that needs "jobs ranked for this query", with
-a safe fallback if the RAG vector index hasn't been built yet (so pages
-don't crash during development/demo before rag_service.build_index()
-has been run).
-"""
-import csv
-from pathlib import Path
+"""Shared semantic retrieval and recommendation helpers."""
+import logging
 
-JOBS_CSV_FALLBACK = Path(__file__).resolve().parent.parent / "data" / "jobs_clean.csv"
+from services.job_matcher import rank_jobs
+from services.rag_service import MAX_TOP_K, MIN_SEMANTIC_SCORE
+from services.skill_normalizer import normalize_skill_list
 
 
-def _fallback_jobs(limit: int = 30) -> list[dict]:
-    if not JOBS_CSV_FALLBACK.exists():
-        return []
-    with open(JOBS_CSV_FALLBACK, newline="", encoding="utf-8") as f:
-        rows = list(csv.DictReader(f))
-    return rows[:limit]
+logger = logging.getLogger(__name__)
 
 
-def search_jobs(query: str, top_k: int = 20) -> list[dict]:
-    """
-    Returns up to top_k jobs relevant to `query`. Prefers the RAG
-    semantic search; if the vector index hasn't been built yet (or any
-    other issue occurs), degrades to a plain CSV listing so pages still
-    render instead of crashing.
-    """
+def search_jobs(
+    query: str,
+    top_k: int = 20,
+    min_score: float = MIN_SEMANTIC_SCORE,
+) -> list[dict]:
+    """Return relevant FAISS results, or an empty list when retrieval fails."""
     try:
         from services.rag_service import semantic_search
-        return semantic_search(query, top_k=top_k)
+
+        return semantic_search(query, top_k=top_k, min_score=min_score)
     except FileNotFoundError:
-        return _fallback_jobs(top_k)
+        logger.exception("Vector store is unavailable")
+        return []
     except Exception:
-        return _fallback_jobs(top_k)
+        logger.exception("Semantic job retrieval failed")
+        return []
+
+
+def recommend_jobs(
+    query: str,
+    user_skills: list[str],
+    top_k: int = 20,
+) -> list[dict]:
+    """Retrieve, normalize, combine, and rank jobs for one user/query."""
+    if not isinstance(top_k, int) or isinstance(top_k, bool) or not 1 <= top_k <= MAX_TOP_K:
+        raise ValueError(f"top_k must be an integer between 1 and {MAX_TOP_K}")
+
+    normalized_skills = normalize_skill_list(user_skills)
+    effective_query = (query or "").strip()
+    if not effective_query:
+        effective_query = ", ".join(normalized_skills) or "internship entry level"
+
+    candidate_k = min(MAX_TOP_K, max(top_k * 3, top_k))
+    candidates = search_jobs(effective_query, top_k=candidate_k)
+    return rank_jobs(normalized_skills, candidates, top_k=top_k)

@@ -1,0 +1,280 @@
+{% extends "app_shell.html" %}
+{% block title %}Resume Builder - CareerAI{% endblock %}
+{% block app_content %}
+
+<div class="page-head">
+    <h1>Resume Builder</h1>
+    <p>Create a clean, ATS-friendly resume for a role, then review and approve every change before saving.</p>
+</div>
+
+<div class="dash-card">
+    <div class="dash-card-head"><h3>Build Your Resume</h3></div>
+    <form method="POST" action="{{ url_for('resume_builder.generate') }}" id="resume-generation-form" class="resume-generation-form">
+        <div class="form-grid">
+            <div>
+                <label for="target-role"><strong>Target Role</strong></label>
+                <select id="target-role" name="target_role" required style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;">
+                    <option value="">Select a role</option>
+                    {% for role in role_options %}
+                    <option value="{{ role }}" {% if selected_role == role %}selected{% endif %}>{{ role }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="resume-template"><strong>Resume Template</strong></label>
+                <select id="resume-template" name="template" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;">
+                    {% for key, item in templates.items() %}
+                    <option value="{{ key }}" {% if selected_template == key %}selected{% endif %}>{{ item.label }}</option>
+                    {% endfor %}
+                </select>
+                <p class="muted" style="margin:8px 0 0;">{{ selected_template_description }}</p>
+            </div>
+        </div>
+        <label for="custom-instructions" style="display:block;margin-top:16px;"><strong>Custom Instructions (optional)</strong></label>
+        <textarea id="custom-instructions" name="custom_instructions" rows="6" maxlength="5000"
+                  placeholder="Make my resume suitable for Data Analyst roles and emphasize Excel and SQL&#10;Highlight my Document QA project&#10;Focus on Python and Machine Learning"
+                  style="width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;line-height:1.55;">{{ custom_instructions or '' }}</textarea>
+        <p class="muted" style="margin:8px 0 0;">Tell the agent how to tailor the resume. Requests to highlight a skill or project are only applied when that item is already in your profile, so nothing is ever invented.</p>
+        <div class="opportunity-actions" style="margin-top:16px;">
+            <button type="submit" class="btn btn-primary">Generate Tailored Resume</button>
+        </div>
+    </form>
+    <form method="GET" action="{{ url_for('resume_builder.view') }}" class="resume-load-form" style="margin-top:10px;">
+        <input type="hidden" name="target_role" value="{{ selected_role }}">
+        <input type="hidden" name="template" value="{{ selected_template }}">
+        <button type="submit" class="btn btn-outline" {% if not selected_role %}disabled{% endif %}>Load Saved Version</button>
+    </form>
+</div>
+
+{% if error %}
+<div class="flash-banner" style="margin-top:16px;"><p>{{ error }}</p></div>
+{% endif %}
+
+{% if selected_role %}
+<div class="dash-card" style="margin-top:20px;">
+    <div class="dash-card-head"><h3>Role-Level Tailoring Context</h3></div>
+    <p><strong>{{ selected_role }}</strong></p>
+    <p class="muted">Role-level requirements are used for guidance; no individual job or job identifier is selected.</p>
+    {% if role_requirements.required or role_requirements.preferred %}
+    <p class="muted"><strong>Required:</strong> {{ role_requirements.required or 'None listed' }}</p>
+    <p class="muted"><strong>Preferred:</strong> {{ role_requirements.preferred or 'None listed' }}</p>
+    {% endif %}
+</div>
+{% endif %}
+
+<div class="dash-card" style="margin-top:20px;">
+    <div class="dash-card-head"><h3>Current Profile</h3></div>
+    <p><strong>{{ candidate.name or 'Candidate' }}</strong></p>
+    {% if candidate.email %}<p class="muted">{{ candidate.email }}{% if candidate.phone %} · {{ candidate.phone }}{% endif %}</p>{% endif %}
+    <p class="muted">{{ candidate.college or 'College not provided' }}{% if candidate.degree %} · {{ candidate.degree }}{% endif %}</p>
+    <p class="muted">{% if candidate.cgpa is not none %}CGPA: {{ candidate.cgpa }}{% else %}CGPA not provided{% endif %}{% if candidate.passing_year %} · Passing year: {{ candidate.passing_year }}{% endif %}</p>
+    {% if candidate.summary %}<p>{{ candidate.summary }}</p>{% endif %}
+</div>
+
+<div class="dash-card" style="margin-top:20px;">
+    <div class="dash-card-head"><h3>Verified Profile Sections</h3></div>
+    <div class="dash-grid">
+        <div class="dash-col">
+            <h4>Skills</h4>
+            <div class="skill-pill-row">
+                {% for skill in candidate.skills %}<span class="skill-pill have">{{ skill }}</span>{% else %}<span class="muted">No skills recorded.</span>{% endfor %}
+            </div>
+            <h4 style="margin-top:20px;">Education</h4>
+            {% for education in candidate.education %}
+            <p><strong>{{ education.degree or 'Degree not provided' }}</strong> — {{ education.institution }} {% if education.start_date or education.end_date %}({{ education.start_date or '' }} - {{ education.end_date or '' }}){% endif %}</p>
+            {% else %}<p class="muted">No education records available.</p>{% endfor %}
+        </div>
+        <div class="dash-col">
+            <h4>Experience</h4>
+            {% for experience in candidate.experience %}
+            <p><strong>{{ experience.title }}</strong> — {{ experience.organization or 'Organization not provided' }}</p>
+            {% if experience.description %}<p class="muted">{{ experience.description }}</p>{% endif %}
+            {% else %}<p class="muted">No experience records available.</p>{% endfor %}
+            <h4 style="margin-top:20px;">Projects</h4>
+            {% for project in candidate.projects %}
+            <p><strong>{{ project.title }}</strong>{% if project.tech_stack %} · {{ project.tech_stack }}{% endif %}</p>
+            {% if project.description %}<p class="muted">{{ project.description }}</p>{% endif %}
+            {% else %}<p class="muted">No projects available.</p>{% endfor %}
+        </div>
+    </div>
+</div>
+
+<div class="dash-card" style="margin-top:20px;">
+    <div class="dash-card-head"><h3>Skill Gap Context</h3></div>
+    {% if skill_gap %}
+    <p class="muted">{% if skill_gap.from_cache %}Using the saved Skill Gap report.{% else %}Skill Gap data is available for this role.{% endif %}</p>
+    <p><strong>Already have:</strong>
+        {% for skill in skill_gap.matched_skills %}{{ skill }}{% if not loop.last %}, {% endif %}{% else %}None reported{% endfor %}
+    </p>
+    <p><strong>Missing required:</strong>
+        {% for skill in skill_gap.missing_required_skills %}{{ skill }}{% if not loop.last %}, {% endif %}{% else %}None reported{% endfor %}
+    </p>
+    <p><strong>Missing preferred:</strong>
+        {% for skill in skill_gap.missing_preferred_skills %}{{ skill }}{% if not loop.last %}, {% endif %}{% else %}None reported{% endfor %}
+    </p>
+    <p class="muted">Missing skills remain learning recommendations. They are not added to the profile automatically.</p>
+    {% else %}
+    <p class="muted">No saved Skill Gap report is available for this role yet.</p>
+    {% endif %}
+</div>
+
+{% if result %}
+<div class="dash-card" style="margin-top:20px;" id="resume-result">
+    <div class="dash-card-head">
+        <h3>Tailored Resume Preview</h3>
+        <span class="status-badge {{ 'applied' if result.fact_check_status == 'passed' else 'under_review' }}">Fact check: {{ result.fact_check_status }}</span>
+    </div>
+    <p class="muted">
+        {% if result.from_cache %}Loaded saved version.{% else %}Newly generated version.{% endif %}
+        {% if result.used_fallback %} AI fallback used.{% endif %}
+    </p>
+
+    <label for="resume-editor"><strong>Editable Resume</strong></label>
+    <textarea id="resume-editor" name="resume_text" rows="28" readonly
+              style="width:100%;padding:14px;border:1px solid var(--border);border-radius:8px;line-height:1.6;font-family:Arial,sans-serif;">{{ result.resume_text or '' }}</textarea>
+    <p class="muted" style="margin-top:8px;">Edit Resume unlocks the text for manual changes. Saving stores the exact text you approve and does not call the AI.</p>
+
+    <div class="opportunity-actions" style="margin-top:14px;">
+        <button type="button" class="btn btn-outline" id="edit-resume">Edit Resume</button>
+        <button type="button" class="btn btn-outline" id="download-resume">Download Resume</button>
+    </div>
+
+    <form method="POST" action="{{ url_for('resume_builder.save') }}" id="save-resume-form" style="margin-top:14px;">
+        <input type="hidden" name="target_role" value="{{ selected_role }}">
+        <input type="hidden" name="template" value="{{ selected_template }}">
+        <input type="hidden" name="custom_instructions" id="save-custom-instructions" value="{{ custom_instructions or '' }}">
+        <input type="hidden" name="resume_text" id="save-resume-text" value="">
+        <button type="submit" class="btn btn-primary" id="save-resume">Save Resume</button>
+    </form>
+
+    {% if saved %}
+    <div class="flash-banner" style="margin-top:14px;background:var(--success-bg);color:var(--success);">
+        <p>Resume saved exactly as approved.</p>
+        {% if profile_updates.summary_updated %}<p>Approved summary copied to your profile.</p>{% endif %}
+        {% if profile_updates.skills_added %}<p>Added user-provided skills: {{ profile_updates.skills_added|join(', ') }}.</p>{% endif %}
+        {% if profile_updates.projects_added %}<p>Added user-provided projects: {{ profile_updates.projects_added|join(', ') }}.</p>{% endif %}
+        {% if profile_updates.experience_added %}<p>Added user-provided experience: {{ profile_updates.experience_added|join(', ') }}.</p>{% endif %}
+    </div>
+    {% endif %}
+
+    {% if result.user_updates and (result.user_updates.skills or result.user_updates.projects or result.user_updates.experience) %}
+    <p class="muted" style="margin-top:14px;">User-provided additions included in this draft: review them before saving.</p>
+    {% endif %}
+
+    {% if result.ai_suggestions and (result.ai_suggestions.professional_summary or result.ai_suggestions.experience or result.ai_suggestions.projects) %}
+    <h4 style="margin-top:20px;">AI Wording Suggestions — Review Only</h4>
+    <p class="muted">These suggestions are not treated as verified facts until reviewed by the user.</p>
+    {% if result.ai_suggestions.professional_summary %}<p><strong>Suggested summary:</strong> {{ result.ai_suggestions.professional_summary }}</p>{% endif %}
+    {% for suggestion in result.ai_suggestions.experience %}
+    <p><strong>{{ suggestion.title }}{% if suggestion.organization %} — {{ suggestion.organization }}{% endif %}</strong></p>
+    <ul>{% for bullet in suggestion.bullets %}<li>{{ bullet }}</li>{% endfor %}</ul>
+    {% endfor %}
+    {% for suggestion in result.ai_suggestions.projects %}
+    <p><strong>{{ suggestion.title }}</strong></p>
+    <ul>{% for bullet in suggestion.bullets %}<li>{{ bullet }}</li>{% endfor %}</ul>
+    {% endfor %}
+    {% endif %}
+
+    {% if result.flagged_claims %}
+    <h4 style="margin-top:20px;">Flagged/Unverified Claims</h4>
+    <ul>{% for claim in result.flagged_claims %}<li>{{ claim.claim }} — {{ claim.reason }}</li>{% endfor %}</ul>
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('resume_builder.regenerate') }}" class="resume-regenerate-form" style="margin-top:18px;">
+        <input type="hidden" name="target_role" value="{{ selected_role }}">
+        <input type="hidden" name="template" value="{{ selected_template }}">
+        <input type="hidden" name="custom_instructions" value="{{ custom_instructions or '' }}">
+        <button type="submit" class="btn btn-outline">Regenerate with Fresh AI Pass</button>
+    </form>
+</div>
+{% else %}
+<div class="dash-card" style="margin-top:20px;">
+    <p class="muted">Choose a target role and generate a resume to begin. You will be able to edit and approve the final version before anything is saved.</p>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const editor = document.getElementById('resume-editor');
+    const editButton = document.getElementById('edit-resume');
+    const saveForm = document.getElementById('save-resume-form');
+    const savedText = document.getElementById('save-resume-text');
+    const savedInstructions = document.getElementById('save-custom-instructions');
+    const instructionEditor = document.getElementById('custom-instructions');
+    const templateSelect = document.getElementById('resume-template');
+    let dirty = false;
+
+    // Keep the template hint in sync so the layout choice is easy to understand.
+    const templateDescriptions = {{ templates|tojson }};
+    if (templateSelect) {
+        const updateTemplateHint = () => {
+            const hint = templateSelect.parentElement.querySelector('p.muted');
+            const item = templateDescriptions[templateSelect.value];
+            if (hint && item) hint.textContent = item.description;
+        };
+        templateSelect.addEventListener('change', updateTemplateHint);
+    }
+
+    if (editor) {
+        savedText.value = editor.value;
+        editButton.addEventListener('click', () => {
+            editor.readOnly = !editor.readOnly;
+            editButton.textContent = editor.readOnly ? 'Edit Resume' : 'Editing Enabled';
+            if (!editor.readOnly) editor.focus();
+        });
+        editor.addEventListener('input', () => {
+            dirty = true;
+            savedText.value = editor.value;
+        });
+
+        // Download the exact text currently shown, so the file always matches
+        // the preview and any manual edits.
+        const downloadButton = document.getElementById('download-resume');
+        if (downloadButton) {
+            downloadButton.addEventListener('click', () => {
+                const role = (document.getElementById('target-role') || {}).value || 'resume';
+                const safeRole = role.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+                const blob = new Blob([editor.value], { type: 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = (safeRole || 'resume') + '-resume.txt';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            });
+        }
+    }
+
+    if (saveForm) {
+        saveForm.addEventListener('submit', event => {
+            if (!editor.value.trim()) {
+                event.preventDefault();
+                return;
+            }
+            savedText.value = editor.value;
+            savedInstructions.value = instructionEditor ? instructionEditor.value : savedInstructions.value;
+            dirty = false;
+        });
+    }
+
+    document.querySelectorAll('.resume-generation-form, .resume-regenerate-form, .resume-load-form').forEach(form => {
+        form.addEventListener('submit', event => {
+            if (dirty && !window.confirm('This will replace the current editor text. Continue?')) {
+                event.preventDefault();
+            }
+        });
+    });
+
+    window.addEventListener('beforeunload', event => {
+        if (!dirty) return;
+        event.preventDefault();
+        event.returnValue = '';
+    });
+}());
+</script>
+{% endblock %}

@@ -1,0 +1,217 @@
+{% extends "app_shell.html" %}
+{% block title %}Skill Gap - CareerAI{% endblock %}
+{% block app_content %}
+
+<div class="page-head">
+    <h1>Skill Gap Analysis</h1>
+    <p>Compare your verified profile with a role or with a job description you provide.</p>
+</div>
+
+<div class="dash-card">
+    <form id="skill-gap-form" data-explicit-job-id="{{ specific_job_id or '' }}">
+        <div class="form-grid">
+            <div>
+                <label for="target-role"><strong>Target Role</strong></label>
+                <select id="target-role" name="target_role" required style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;">
+                    {% for role in role_options %}
+                    <option value="{{ role }}" {% if selected_role == role %}selected{% endif %}>{{ role }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="company-name"><strong>Company Name (Optional)</strong></label>
+                <input id="company-name" name="company" type="text" maxlength="200" value="{{ company or '' }}"
+                       placeholder="Enter company name"
+                       style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;">
+            </div>
+        </div>
+        <label for="job-description" style="display:block;margin-top:14px;"><strong>Job Description (Optional)</strong></label>
+        <textarea id="job-description" name="job_description" rows="7" maxlength="12000"
+                  placeholder="Paste the job description here for job-specific analysis..."
+                  style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;line-height:1.55;">{{ pasted_jd or '' }}</textarea>
+        <p class="muted" style="margin:9px 0 0;">Select a role for general skill-gap analysis, or add a job description for job-specific analysis.</p>
+        <div class="opportunity-actions" style="margin-top:16px;">
+            <button type="submit" class="btn btn-primary" id="analyze-skill-gap">Analyze Skill Gap</button>
+        </div>
+    </form>
+    <p id="skill-gap-status" class="muted" aria-live="polite" style="margin-top:14px;" hidden></p>
+    {% if error %}<div class="flash-banner" style="margin-top:14px;"><p>{{ error }}</p></div>{% endif %}
+</div>
+
+<div id="skill-gap-report" style="margin-top:20px;" hidden>
+    <div class="dash-card" id="analysis-context-card">
+        <div class="dash-card-head"><h3>Analysis Context</h3></div>
+        <p id="selected-job-title"><strong>Select a role and analyze to see the skill gap.</strong></p>
+        <p id="selected-job-company" class="muted">No company or job description is required for role-level analysis.</p>
+    </div>
+
+    <div class="dash-grid" style="margin-top:20px;">
+        <div class="dash-col">
+            <div class="dash-card">
+                <div class="dash-card-head"><h3>✓ Already Have</h3></div>
+                <div id="matched-skills" class="skill-pill-row"></div>
+            </div>
+            <div class="dash-card">
+                <div class="dash-card-head"><h3>△ Need to Strengthen</h3></div>
+                <div id="partial-matches" class="skill-pill-row"></div>
+            </div>
+            <div class="dash-card">
+                <div class="dash-card-head"><h3>Experience Gaps</h3></div>
+                <div id="experience-gaps" class="skill-pill-row"></div>
+            </div>
+            <div class="dash-card">
+                <div class="dash-card-head"><h3>Qualification Gaps</h3></div>
+                <div id="qualification-gaps" class="skill-pill-row"></div>
+            </div>
+        </div>
+
+        <div class="dash-col">
+            <div class="dash-card">
+                <div class="dash-card-head"><h3>✗ Missing / Important Skills</h3></div>
+                <p class="muted">Learn or gain experience before adding these to your profile.</p>
+                <div id="missing-required" class="skill-pill-row"></div>
+            </div>
+            <div class="dash-card">
+                <div class="dash-card-head"><h3>Preferred Skills</h3></div>
+                <p class="muted">These are optional learning recommendations, not current profile facts.</p>
+                <div id="missing-preferred" class="skill-pill-row"></div>
+            </div>
+            <div class="dash-card">
+                <div class="dash-card-head"><h3>Priority Gaps & Recommendations</h3></div>
+                <div id="skill-gap-recommendations"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="dash-card" style="margin-top:20px;">
+        <div class="dash-card-head"><h3>Next Steps</h3></div>
+        <p class="muted">Missing skills are learning recommendations and are never added automatically.</p>
+        <div class="opportunity-actions">
+            <a id="improve-resume-link" class="btn btn-outline" href="#" aria-disabled="true" onclick="return false;">Improve Resume</a>
+            <a id="prepare-interview-link" class="btn btn-outline" href="#" aria-disabled="true" onclick="return false;">Prepare for Interview</a>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function skillGapText(item, keys) {
+    if (typeof item === 'string') return item;
+    for (const key of keys) {
+        if (item && item[key]) return item[key];
+    }
+    return '';
+}
+
+function renderSkillGapList(elementId, items, keys, className) {
+    const container = document.getElementById(elementId);
+    container.replaceChildren();
+    if (!Array.isArray(items) || items.length === 0) {
+        const empty = document.createElement('span');
+        empty.className = 'muted';
+        empty.textContent = 'None reported';
+        container.appendChild(empty);
+        return;
+    }
+    items.forEach(item => {
+        const label = skillGapText(item, keys);
+        if (!label) return;
+        const pill = document.createElement('span');
+        pill.className = `skill-pill ${className}`;
+        pill.textContent = label;
+        const reason = item && typeof item === 'object' ? (item.why_it_matters || item.note || item.gap || '') : '';
+        if (reason) pill.title = reason;
+        container.appendChild(pill);
+    });
+}
+
+function renderSkillGapReport(report, data) {
+    const analysis = data.analysis || {};
+    const job = data.job;
+    const role = data.target_role || document.getElementById('target-role').value;
+    const contextTitle = document.getElementById('selected-job-title');
+    const contextCompany = document.getElementById('selected-job-company');
+    if (job) {
+        contextTitle.textContent = `${job.title} — ${job.company}`;
+        contextCompany.textContent = 'Exact Opportunity job selected.';
+    } else if (analysis.mode === 'jd') {
+        contextTitle.textContent = `${role} — provided job description`;
+        contextCompany.textContent = analysis.company
+            ? `Company context: ${analysis.company}`
+            : 'Provided job description; no company name was supplied.';
+    } else {
+        contextTitle.textContent = `${role} — role-level analysis`;
+        contextCompany.textContent = analysis.company
+            ? `Company context: ${analysis.company}`
+            : 'Advisory role requirements; no specific job was selected.';
+    }
+
+    renderSkillGapList('matched-skills', [...(report.matched_skills || []), ...(report.matched_preferred || [])], ['name', 'skill'], 'have');
+    renderSkillGapList('partial-matches', report.partial_gaps || report.partial_matches || [], ['skill'], 'have');
+    renderSkillGapList('missing-required', report.missing_required_skills || report.critical_gaps || [], ['skill'], 'missing');
+    renderSkillGapList('missing-preferred', report.missing_preferred_skills || report.preferred_gaps || [], ['skill'], 'missing');
+    renderSkillGapList('experience-gaps', report.experience_gaps || [], ['gap', 'skill'], 'missing');
+    renderSkillGapList('qualification-gaps', report.qualification_gaps || [], ['gap', 'skill'], 'missing');
+    renderSkillGapList('skill-gap-recommendations', report.recommendations || [], ['action'], 'have');
+
+    const improveLink = document.getElementById('improve-resume-link');
+    const interviewLink = document.getElementById('prepare-interview-link');
+    const jobId = job && job.job_id;
+    improveLink.href = jobId
+        ? `/resume-builder/?job_id=${encodeURIComponent(jobId)}`
+        : `/resume-builder/?target_role=${encodeURIComponent(role)}`;
+    improveLink.setAttribute('aria-disabled', 'false');
+    improveLink.onclick = null;
+    interviewLink.href = jobId
+        ? `/interview/?target_role=${encodeURIComponent(job.title)}&job_id=${encodeURIComponent(jobId)}`
+        : `/interview/?target_role=${encodeURIComponent(role)}`;
+    interviewLink.setAttribute('aria-disabled', 'false');
+    interviewLink.onclick = null;
+    document.getElementById('skill-gap-report').hidden = false;
+}
+
+document.getElementById('skill-gap-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const form = document.getElementById('skill-gap-form');
+    const button = document.getElementById('analyze-skill-gap');
+    const status = document.getElementById('skill-gap-status');
+    const role = document.getElementById('target-role').value;
+    const company = document.getElementById('company-name').value.trim();
+    const jobDescription = document.getElementById('job-description').value.trim();
+    const explicitJobId = form.dataset.explicitJobId || '';
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Analyzing…';
+    status.hidden = false;
+    status.textContent = jobDescription
+        ? 'Analyzing the provided job description against your profile…'
+        : 'Analyzing role-level requirements against your profile…';
+    try {
+        const response = await fetch('/skill-gap/analyze', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                target_role: role,
+                company: company,
+                job_description: jobDescription,
+                explicit_job_id: explicitJobId || null
+            })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || `Request failed with status ${response.status}.`);
+        status.textContent = data.report.used_fallback ? 'Showing a factual skills-only comparison.' : 'Skill Gap report generated.';
+        renderSkillGapReport(data.report, data);
+        const query = new URLSearchParams({ target_role: data.target_role || role });
+        if (explicitJobId) query.set('job_id', explicitJobId);
+        history.replaceState(null, '', `/skill-gap?${query.toString()}`);
+    } catch (error) {
+        status.textContent = error.message || 'Skill Gap analysis could not be completed.';
+    } finally {
+        button.disabled = false;
+        button.textContent = originalText;
+    }
+});
+</script>
+{% endblock %}

@@ -1,54 +1,84 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block content %}
 
-<div class="app-shell">
-    <aside class="app-sidebar">
-        <div class="sidebar-logo">
-            <span class="sidebar-logo-mark"></span> CareerAI
+<div class="app-shell" id="appShell">
+    
+
+    <aside class="app-sidebar" id="appSidebar">
+        <div class="sidebar-top">
+            <div class="sidebar-logo">
+                <span class="sidebar-logo-mark">{{ icon('book-open') }}</span> CareerAI
+            </div>
+            <button type="button" class="sidebar-close" onclick="closeSidebar()" aria-label="Close menu">
+                {{ icon('x', 'icon-sm') }}
+            </button>
         </div>
 
         <nav class="sidebar-nav">
             <a href="{{ url_for('home.dashboard') }}" class="{{ 'active' if active_page == 'home' else '' }}">
-                <span class="icon"></span> Home
+                {{ icon('home') }} Home
             </a>
             <a href="{{ url_for('profile.view') }}" class="{{ 'active' if active_page == 'profile' else '' }}">
-                <span class="icon"></span> My Profile
+                {{ icon('user') }} My Profile
             </a>
             <a href="{{ url_for('opportunities.list_view') }}" class="{{ 'active' if active_page == 'opportunities' else '' }}">
-                <span class="icon"></span> Opportunities
+                {{ icon('briefcase') }} Opportunities
+            </a>
+            <a href="{{ url_for('skill_gap.view') }}" class="{{ 'active' if active_page == 'skill_gap' else '' }}">
+                {{ icon('search') }} Skill Gap
             </a>
             <a href="{{ url_for('applications.list_view') }}" class="{{ 'active' if active_page == 'applications' else '' }}">
-                <span class="icon"></span> My Applications
+                {{ icon('file-text') }} My Applications
             </a>
             <a href="{{ url_for('interview.view') }}" class="{{ 'active' if active_page == 'interview' else '' }}">
-                <span class="icon"></span> Interview Preparation
+                {{ icon('mic') }} Interview Preparation
+            </a>
+
+                        <a href="{{ url_for('resume_builder.view') }}" class="{{ 'active' if active_page == 'resume_builder' else '' }}">
+                {{ icon('file-text') }} Resume Builder
+            </a>
+            <a href="{{ url_for('cover_letter.view') }}" class="{{ 'active' if active_page == 'cover_letter' else '' }}">
+                {{ icon('mail') }} Cover Letter
             </a>
             <a href="{{ url_for('assistant.view') }}" class="{{ 'active' if active_page == 'assistant' else '' }}">
-                <span class="icon"></span> Career Assistant
+                {{ icon('message-circle') }} Career Assistant
             </a>
         </nav>
 
         <div class="sidebar-footer-card">
             <p class="sidebar-footer-title">Your Career Journey Matters</p>
             <p class="sidebar-footer-text">Keep learning, keep growing. We're here to support you!</p>
-            <a href="{{ url_for('interview.view') }}">Start preparing &rarr;</a>
+            <a href="{{ url_for('interview.view') }}">Start preparing {{ icon('arrow-right', 'icon-sm') }}</a>
         </div>
     </aside>
 
     <div class="app-main-wrap">
         <header class="app-topbar">
+            <button type="button" class="hamburger-btn" onclick="openSidebar()" aria-label="Open menu">
+                {{ icon('menu') }}
+            </button>
+
             <form class="topbar-search" method="GET" action="{{ url_for('opportunities.list_view') }}">
-                <span class="topbar-search-icon"></span>
+                <span class="topbar-search-icon">{{ icon('search', 'icon-sm') }}</span>
                 <input type="text" name="q" placeholder="Search jobs, internships, skills..."
                        value="{{ request.args.get('q', '') }}">
             </form>
+
             <div class="topbar-right">
-                <span class="topbar-bell"><span class="dot"></span></span>
-                <a href="{{ url_for('profile.view') }}" class="topbar-user">
-                    <span class="user-avatar">{{ (session.get('user_name') or 'U')[0] | upper }}</span>
-                    <span class="user-name">{{ session.get('user_name', 'User') }}</span>
-                </a>
-                <a href="{{ url_for('auth.logout') }}" class="topbar-logout">Logout</a>
+                <span class="topbar-bell">{{ icon('bell') }}<span class="dot"></span></span>
+
+                <div class="profile-menu">
+                    <button type="button" class="topbar-user" onclick="toggleProfileMenu(event)">
+                        <span class="user-avatar">{{ (session.get('user_name') or 'U')[0] | upper }}</span>
+                        <span class="user-name">{{ session.get('user_name', 'User') }}</span>
+                        {{ icon('chevron-down', 'icon-sm') }}
+                    </button>
+                    <div class="profile-dropdown" id="profileDropdown">
+                        <a href="{{ url_for('profile.view') }}">{{ icon('user', 'icon-sm') }} Edit Profile</a>
+                        <a href="{{ url_for('auth.logout') }}">{{ icon('log-out', 'icon-sm') }} Logout</a>
+                    </div>
+                </div>
             </div>
         </header>
 
@@ -56,6 +86,17 @@
             {% block app_content %}{% endblock %}
         </main>
     </div>
+
+    {# Single global launcher. Fixed to the viewport's bottom-right corner, so it
+       is deliberately placed after .app-main-wrap to stay outside the shell's
+       flex row. Suppressed on the assistant page to avoid a duplicate entry
+       point. #}
+    {% if active_page != 'assistant' %}
+    <a href="{{ url_for('assistant.view') }}" class="chatbot-fab"
+       aria-label="Open Career Assistant" data-tooltip="Career Assistant">
+        {{ icon('message-circle') }}
+    </a>
+    {% endif %}
 </div>
 
 {% endblock %}
