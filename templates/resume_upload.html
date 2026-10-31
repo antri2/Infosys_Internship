@@ -1,36 +1,77 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "partials/brand.html" import brand_mark %}
+{% block surface_styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
+{% endblock %}
 {% block title %}Upload Your Resume - CareerAI{% endblock %}
+{% block body_class %}surface{% endblock %}
+{% block backdrop %}{% include "partials/neural.html" %}{% endblock %}
 {% block content %}
 
-<nav class="navbar">
-    <a href="{{ url_for('landing') }}" class="logo">&#127891; CareerAI</a>
-</nav>
-
-<div class="auth-page">
-    <div class="auth-card">
-        <p class="step-label">Step 2 of 2</p>
-        <h1>Upload Your Resume</h1>
-        <p class="auth-sub">
-            This is required once &mdash; CareerAI reads your resume and builds your candidate
-            profile automatically. PDF or DOCX, up to 5MB.
-        </p>
-
-        <div class="dropzone" id="dropzone">
-            <p class="dropzone-icon">&#128228;</p>
-            <p class="dropzone-text">Drop your resume here, or click to browse</p>
-            <input type="file" id="resume-file" accept=".pdf,.docx" hidden>
+<div class="sc-shell">
+    <header class="sc-nav">
+        <div class="sc-container sc-nav__inner">
+            <a href="{{ url_for('landing') }}" class="sc-brand">
+                {{ brand_mark() }}
+                <span>CareerAI</span>
+            </a>
+            <div class="sc-nav__actions">
+                <a href="{{ url_for('home.dashboard') }}" class="sc-btn sc-btn--ghost">Dashboard</a>
+            </div>
         </div>
+    </header>
 
-        <div id="upload-status" class="upload-status" hidden></div>
-        <div id="extracted-result" class="extracted-result" hidden></div>
+    <main class="sc-auth">
+        <div class="sc-auth__grid">
 
-        <button id="continue-btn" class="btn btn-primary btn-block" style="margin-top:16px" disabled>
-            Continue to Home
-        </button>
-    </div>
+            <aside class="sc-auth__aside">
+                <p class="sc-eyebrow"><span class="sc-eyebrow__dot"></span> Step 2 of 2</p>
+                <h2>Upload your resume</h2>
+                <p>
+                    CareerAI reads your resume and builds your profile from it. You will
+                    get to check everything it found before it is used for anything.
+                </p>
+                <ul class="sc-auth__points">
+                    <li>{{ icon('file-text') }} PDF or DOCX, up to 5MB</li>
+                    <li>{{ icon('shield-check') }} Your file is used to fill your own profile only</li>
+                    <li>{{ icon('edit') }} You can correct every field afterwards</li>
+                </ul>
+            </aside>
+
+            <div class="sc-auth__card">
+                <a href="{{ url_for('landing') }}" class="sc-auth__brand">
+                    {{ brand_mark() }}
+                    <span>CareerAI</span>
+                </a>
+
+                <h1 class="sc-auth__title">Upload your resume</h1>
+                <p class="sc-auth__sub">This is required once.</p>
+
+                <div class="dropzone" id="dropzone">
+                    <p class="dropzone-icon">{{ icon('file-text') }}</p>
+                    <p class="dropzone-text">Drop your resume here, or click to browse</p>
+                    <input type="file" id="resume-file" accept=".pdf,.docx" hidden>
+                </div>
+
+                <div id="upload-status" class="upload-status" hidden></div>
+                <div id="extracted-result" class="extracted-result" hidden></div>
+
+                {# Goes to the review page, which shows every parsed section and
+                   lets the user correct it before anything else uses it. #}
+                <a href="{{ url_for('resume.review') }}" id="continue-btn"
+                   class="sc-btn sc-btn--primary sc-btn--lg sc-btn--block"
+                   style="margin-top:20px;" aria-disabled="true"
+                   onclick="if (this.getAttribute('aria-disabled') === 'true') { event.preventDefault(); }">
+                    Review your profile
+                </a>
+            </div>
+        </div>
+    </main>
 </div>
 
 {% endblock %}
+
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/resume_upload.js') }}"></script>
 {% endblock %}

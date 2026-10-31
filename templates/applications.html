@@ -1,49 +1,196 @@
 {% extends "app_shell.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}My Applications - CareerAI{% endblock %}
+
 {% block app_content %}
 
-<div class="page-head">
-    <h1>My Applications</h1>
-    <p>Track everything you've saved or applied...</p>
-</div>
+{# Deep-navy shell with light neutral cards inside, so this page is visually
+   distinct from Home rather than reusing the same ambient background.
 
-<div class="filter-tabs">
-    <a href="{{ url_for('applications.list_view', status='all') }}" class="filter-tab {{ 'active' if status_filter == 'all' }}">All</a>
-    <a href="{{ url_for('applications.list_view', status='saved') }}" class="filter-tab {{ 'active' if status_filter == 'saved' }}">Saved</a>
-    <a href="{{ url_for('applications.list_view', status='applied') }}" class="filter-tab {{ 'active' if status_filter == 'applied' }}">Applied</a>
-    <a href="{{ url_for('applications.list_view', status='interview') }}" class="filter-tab {{ 'active' if status_filter == 'interview' }}">Interview</a>
-    <a href="{{ url_for('applications.list_view', status='under_review') }}" class="filter-tab {{ 'active' if status_filter == 'under_review' }}">Under Review</a>
-    <a href="{{ url_for('applications.list_view', status='rejected') }}" class="filter-tab {{ 'active' if status_filter == 'rejected' }}">Rejected</a>
-</div>
+   Next Step reads the row's own status and only ever links to an existing
+   route. It never changes a status -- it is a suggestion, not an action on
+   the record -- and it never invents an interview date, an employer response
+   or a deadline. When no route fits the status, it shows a status message
+   instead of a button that would do nothing. #}
 
-<div class="dash-card">
+<div class="applications-page">
+
+    <div class="page-head">
+        <h1>My Applications</h1>
+        <p>Everything you have saved or applied to, with the next useful step for each.</p>
+    </div>
+
+    <div class="applications-filters" role="group" aria-label="Filter applications by status">
+        {% for key, label in [('all', 'All'), ('saved', 'Saved'), ('applied', 'Applied'),
+                              ('interview', 'Interview'), ('under_review', 'Under Review'),
+                              ('rejected', 'Rejected')] %}
+        <a href="{{ url_for('applications.list_view', status=key) }}"
+           class="filter-tab {{ 'active' if status_filter == key }}"
+           {% if status_filter == key %}aria-current="page"{% endif %}>{{ label }}</a>
+        {% endfor %}
+    </div>
+
     {% if applications %}
-    <table class="app-table">
-        <thead>
-            <tr><th>Job Title</th><th>Company</th><th>Location</th><th>Status</th><th>Updated</th><th>Next Step</th></tr>
-        </thead>
-        <tbody>
+        <div class="app-tracker">
             {% for a in applications %}
-            <tr>
-                <td>{{ a.title }}</td>
-                <td>{{ a.company }}</td>
-                <td>{{ a.location }}</td>
-                <td><span class="status-badge {{ a.status }}">{{ a.status.replace('_', ' ') | title }}</span></td>
-                <td>{{ a.applied_on.strftime('%b %d, %Y') if a.applied_on else '' }}</td>
-                <td>
-                    {% if a.status == 'interview' %}
-                    <a class="btn btn-outline" href="{{ url_for('interview.view', job_id=a.job_id, target_role=a.title, target_source='custom') }}">Prepare for Interview</a>
-                    {% else %}
-                    <span class="muted">—</span>
+            <article class="app-tracker__card">
+
+                <div class="app-tracker__head">
+                    <h2 class="app-tracker__title">{{ a.title or 'Untitled role' }}</h2>
+                    <p class="app-tracker__company">{{ a.company or 'Company not provided' }}</p>
+                </div>
+
+                <div class="app-tracker__badge">
+                    {# `a.status` is the stored value; the label is derived from
+                       it and never overrides it. #}
+                    <span class="status-badge {{ a.status }}">{{ a.status.replace('_', ' ') | title }}</span>
+                </div>
+
+                <ul class="app-tracker__meta">
+                    {% if a.location %}
+                    <li>{{ icon('map-pin') }} {{ a.location }}</li>
                     {% endif %}
-                </td>
-            </tr>
+                    {% if a.job_type %}
+                    <li>{{ a.job_type }}</li>
+                    {% endif %}
+                    <li>
+                        {{ icon('clock') }}
+                        {% if a.applied_on %}
+                            Applied {{ a.applied_on.strftime('%b %d, %Y') }}
+                        {% else %}
+                            Saved {{ a.updated_at.strftime('%b %d, %Y') if a.updated_at else 'recently' }}
+                        {% endif %}
+                    </li>
+                </ul>
+
+                {# ---- Contextual Next Step ----------------------------------
+                   One branch per stored status. Each either offers a real
+                   route or states the status; there is no empty cell. #}
+                {% if a.status == 'saved' %}
+                <div class="app-tracker__next">
+                    <span class="app-tracker__next-label">{{ icon('arrow-right') }} Next step</span>
+                    <span class="app-tracker__next-text">This role is saved but not applied to yet.</span>
+                    {# Posts to the existing /applications/<id>/apply endpoint,
+                       the same one the Opportunities page uses. The stored
+                       status remains the source of truth: the endpoint decides
+                       the outcome and a refusal is shown as an error. #}
+                    <button type="button" class="ai-btn ai-btn--primary"
+                            data-apply-job="{{ a.job_id }}">Apply for this job</button>
+                </div>
+
+                {% elif a.status in ('applied', 'interview') %}
+                <div class="app-tracker__next">
+                    <span class="app-tracker__next-label">{{ icon('arrow-right') }} Next step</span>
+                    <span class="app-tracker__next-text">
+                        {% if a.status == 'interview' %}You are at interview stage for this role.
+                        {% else %}Applied. Prepare so you are ready if they respond.{% endif %}
+                    </span>
+                    <a class="ai-btn ai-btn--primary"
+                       href="{{ url_for('interview.view', job_id=a.job_id, target_role=a.title, target_source='custom') }}">
+                        Prepare for Interview
+                    </a>
+                </div>
+
+                {% elif a.status == 'under_review' %}
+                <div class="app-tracker__next app-tracker__next--neutral">
+                    <span class="app-tracker__next-label">{{ icon('clock') }} Next step</span>
+                    {# There is no employer response or date in the data, so
+                       this states the status and points at something real
+                       rather than inventing a follow-up. #}
+                    <span class="app-tracker__next-text">
+                        With the employer. Check the Skill Gap to see if you can strengthen anything
+                        while you wait.
+                    </span>
+                    <a class="ai-btn ai-btn--ghost"
+                       href="{{ url_for('skill_gap.view', job_id=a.job_id, target_role=a.title) }}">Skill Gap</a>
+                </div>
+
+                {% elif a.status == 'rejected' %}
+                <div class="app-tracker__next app-tracker__next--neutral">
+                    <span class="app-tracker__next-label">{{ icon('check-circle') }} Next step</span>
+                    <span class="app-tracker__next-text">
+                        Not moving forward with this role. Keep applying elsewhere.
+                    </span>
+                    <a class="ai-btn ai-btn--primary"
+                       href="{{ url_for('opportunities.list_view') }}">Explore other opportunities</a>
+                </div>
+
+                {% else %}
+                <div class="app-tracker__next app-tracker__next--neutral">
+                    <span class="app-tracker__next-label">{{ icon('circle') }} Status</span>
+                    <span class="app-tracker__next-text">
+                        No next step is suggested for this status.
+                    </span>
+                </div>
+                {% endif %}
+
+            </article>
             {% endfor %}
-        </tbody>
-    </table>
+        </div>
     {% else %}
-    <p class="muted">Nothing here yet. Head over to <a href="{{ url_for('opportunities.list_view') }}">Opportunities</a> to save or apply to a role.</p>
+        <p class="applications-empty">
+            Nothing here yet. Head over to
+            <a href="{{ url_for('opportunities.list_view') }}">Opportunities</a>
+            to save or apply to a role.
+        </p>
     {% endif %}
 </div>
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* Apply from a Saved row. Same endpoint, same semantics as the Opportunities
+   page: the response's `status` is written back into the badge, and anything
+   that is not a success is surfaced as an error toast rather than swallowed. */
+document.addEventListener('click', async function (event) {
+    const button = event.target.closest('[data-apply-job]');
+    if (!button || button.disabled) return;
+
+    const jobId = button.dataset.applyJob;
+    const card = button.closest('.app-tracker__card');
+    const badge = card ? card.querySelector('.status-badge') : null;
+    const original = button.textContent.trim();
+
+    button.disabled = true;
+    button.textContent = 'Applying…';
+
+    try {
+        const response = await fetch(`/applications/${jobId}/apply`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' }
+        });
+        const raw = await response.text();
+        let data = {};
+        if (raw) { try { data = JSON.parse(raw); } catch (_) { data = {}; } }
+
+        if (!response.ok || data.error) {
+            // Report the actual reason the endpoint gave.
+            window.showToast(data.error || 'This application could not be updated.', 'error');
+            button.textContent = original;
+            return;
+        }
+
+        if (badge && data.status) {
+            badge.className = `status-badge ${data.status}`;
+            badge.textContent = data.status.replace(/_/g, ' ')
+                .replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+        }
+
+        // data.message is the endpoint's own "existing status was preserved"
+        // notice, so it is surfaced verbatim rather than reworded.
+        window.showToast(
+            data.message || 'Marked as applied.',
+            data.status === 'applied' ? 'success' : 'error'
+        );
+        button.textContent = 'Applied';
+    } catch (error) {
+        window.showToast(error.message || 'This application could not be updated.', 'error');
+        button.textContent = original;
+    } finally {
+        button.disabled = false;
+    }
+});
+</script>
 {% endblock %}

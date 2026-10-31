@@ -1,0 +1,29 @@
+{# Right-side notification drawer.
+
+   The bell keeps its place in the header; this is the panel it opens. It is
+   rendered empty on the server and filled from /notifications/ by
+   partials/notifications_script.html, so nothing here can show a notification
+   the application did not actually produce. #}
+<div class="notification-drawer-backdrop" id="notificationBackdrop" hidden></div>
+
+<aside class="notification-drawer" id="notificationDrawer" role="dialog"
+       aria-modal="false" aria-labelledby="notificationDrawerTitle" hidden>
+    <header class="notification-drawer-head">
+        <div>
+            <h2 class="notification-drawer-title" id="notificationDrawerTitle">Notifications</h2>
+            <p class="notification-drawer-sub" id="notificationDrawerSub">Updates from your CareerAI data</p>
+        </div>
+        <button type="button" class="notification-drawer-close" id="notificationDrawerClose"
+                aria-label="Close notifications">&times;</button>
+    </header>
+
+    <div class="notification-drawer-toolbar">
+        <button type="button" class="notification-readall" id="notificationReadAll" hidden>
+            Mark all as read
+        </button>
+    </div>
+
+    <div class="notification-drawer-body" id="notificationDrawerBody">
+        <p class="notification-empty">Loading notifications…</p>
+    </div>
+</aside>

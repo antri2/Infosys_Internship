@@ -87,9 +87,27 @@ def get_candidate_context(db, user_id: int) -> dict:
 
 
 def get_job_context(db, job_id: int) -> dict | None:
+    """Resolve one job by id, from either job source.
+
+    Local jobs come from MySQL exactly as before. Ids in the reserved Adzuna
+    range have no MySQL row, so they are resolved from the short-lived live
+    cache that services.adzuna_service fills when it fetches listings. Every
+    caller (Skill Gap, AI Summary, Interview, Cover Letter, Resume Builder and
+    the orchestrator) therefore keeps working for live jobs without knowing
+    which source produced them.
+    """
     with db.cursor() as cursor:
         cursor.execute("SELECT * FROM jobs WHERE job_id = %s", (job_id,))
-        return cursor.fetchone()
+        row = cursor.fetchone()
+    if row:
+        return row
+
+    try:
+        from services import live_job_store
+
+        return live_job_store.get(job_id)
+    except Exception:  # pragma: no cover - never let a lookup break an agent
+        return None
 
 
 def build_agent_context(db, user_id: int, job_id: int | None) -> tuple[dict, dict | None]:

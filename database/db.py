@@ -19,6 +19,7 @@ import config
 BASE_DIR = Path(__file__).resolve().parent
 SCHEMA_PATH = BASE_DIR / "schema.sql"
 M3_MIGRATION_PATH = BASE_DIR / "migration_m3.sql"
+M4_MIGRATION_PATH = BASE_DIR / "migration_m4.sql"
 
 
 def get_db():
@@ -137,6 +138,57 @@ def _ensure_interview_plan_job_nullable(cursor) -> None:
         )
 
 
+def _ensure_chat_session_title_column(cursor) -> None:
+    """Add chat_sessions.title for the Career Assistant conversation list.
+
+    MySQL has no portable "ADD COLUMN IF NOT EXISTS", and init_db() runs on
+    every start, so the check is made explicitly -- the same approach already
+    used for applications.resume_id. Existing rows keep a NULL title, which the
+    assistant reads as "derive the title from the first question".
+    """
+    cursor.execute(
+        """
+        SELECT COUNT(*)
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = %s
+          AND TABLE_NAME = 'chat_sessions'
+          AND COLUMN_NAME = 'title'
+        """,
+        (config.MYSQL_DATABASE,),
+    )
+    if cursor.fetchone()[0] == 0:
+        cursor.execute(
+            "ALTER TABLE chat_sessions ADD COLUMN title VARCHAR(255) NULL AFTER user_id"
+        )
+
+
+def _ensure_cover_letter_target_role(cursor) -> None:
+    """Add cover_letters.target_role.
+
+    A role-specific generic letter has no job row, so the role the user picked
+    is the only thing that can identify it. Storing it is what lets the saved
+    list say "Generic Cover Letter / Data Analyst" instead of the ambiguous
+    "Generic Cover Letter".
+
+    The column is nullable and existing rows keep NULL, so no stored letter is
+    altered. Those rows fall back to their job title where one exists.
+    """
+    cursor.execute(
+        """
+        SELECT COUNT(*)
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = %s
+          AND TABLE_NAME = 'cover_letters'
+          AND COLUMN_NAME = 'target_role'
+        """,
+        (config.MYSQL_DATABASE,),
+    )
+    if cursor.fetchone()[0] == 0:
+        cursor.execute(
+            "ALTER TABLE cover_letters ADD COLUMN target_role VARCHAR(120) NULL AFTER job_id"
+        )
+
+
 def init_db():
     """Create/update the configured database schema without loading job data."""
     if not re.fullmatch(r"[A-Za-z0-9_]+", config.MYSQL_DATABASE):
@@ -158,8 +210,11 @@ def init_db():
             cursor.execute(f"USE `{config.MYSQL_DATABASE}`")
             _execute_sql_file(cursor, SCHEMA_PATH)
             _execute_sql_file(cursor, M3_MIGRATION_PATH)
+            _execute_sql_file(cursor, M4_MIGRATION_PATH)
             _ensure_application_resume_schema(cursor)
             _ensure_interview_plan_job_nullable(cursor)
+            _ensure_chat_session_title_column(cursor)
+            _ensure_cover_letter_target_role(cursor)
         connection.commit()
     except Exception:
         connection.rollback()

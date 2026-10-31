@@ -2,12 +2,33 @@ import os
 import re
 import uuid
 
-from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify
+from flask import (
+    Blueprint,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 
 import config
 from database.db import get_db
 from services.file_extraction import extract_text
 from services.resume_parser import parse_resume_text, ResumeParsingError
+from services.skill_normalizer import normalize_skill
+
+# The exact column allowlist the profile page validates against, so the two
+# edit surfaces cannot drift apart on which columns a section owns.
+from routes.profile import CAREER_STATUSES
+from routes.profile import _RECORD_TYPES as RECORD_TYPES
+from routes.auth import validate_phone
+
+# The categories the Resume Parser is instructed to emit
+# (services/resume_parser.py). Shared with routes/profile.py so a skill's
+# category dropdown is identical on the profile page and the review page.
+SKILL_CATEGORIES = ("programming_language", "framework", "tool", "soft_skill", "other")
 
 resume_bp = Blueprint("resume", __name__, url_prefix="/resume")
 
@@ -94,6 +115,246 @@ def parse():
             cursor.execute("UPDATE resumes SET parse_status = 'failed' WHERE id = %s", (resume_id,))
             db.commit()
         return jsonify({"status": "failed", "error": str(e)}), 422
+
+
+@resume_bp.route("/review", methods=["GET"])
+def review():
+    """Show the profile that resume parsing produced, so it can be checked.
+
+    This renders the rows the parser already wrote -- profiles, education,
+    experience, projects, certifications and skills -- grouped into labelled
+    sections. It never inserts anything, so reloading it cannot create a second
+    profile row. Edits post to the existing profile routes and come back here.
+    """
+    if not _require_login():
+        return redirect(url_for("auth.login"))
+
+    db = get_db()
+    user_id = session["user_id"]
+
+    with db.cursor() as cursor:
+        cursor.execute(
+            "SELECT name, email, phone, career_status FROM users WHERE id = %s",
+            (user_id,),
+        )
+        user = cursor.fetchone() or {}
+
+        cursor.execute("SELECT * FROM profiles WHERE user_id = %s", (user_id,))
+        profile = cursor.fetchone() or {}
+
+        cursor.execute(
+            "SELECT id, name, category FROM skills WHERE user_id = %s ORDER BY id",
+            (user_id,),
+        )
+        skills = cursor.fetchall()
+
+        cursor.execute(
+            "SELECT * FROM education WHERE user_id = %s ORDER BY id", (user_id,)
+        )
+        education = cursor.fetchall()
+
+        cursor.execute(
+            "SELECT * FROM experience WHERE user_id = %s ORDER BY id", (user_id,)
+        )
+        experience = cursor.fetchall()
+
+        cursor.execute(
+            "SELECT * FROM projects WHERE user_id = %s ORDER BY id", (user_id,)
+        )
+        projects = cursor.fetchall()
+
+        cursor.execute(
+            "SELECT * FROM certifications WHERE user_id = %s ORDER BY id", (user_id,)
+        )
+        certifications = cursor.fetchall()
+
+        # How the most recent upload went, so the page can say whether these
+        # values came from a parse or were typed in.
+        cursor.execute(
+            "SELECT file_type, parse_status, uploaded_at FROM resumes "
+            "WHERE user_id = %s ORDER BY id DESC LIMIT 1",
+            (user_id,),
+        )
+        latest_resume = cursor.fetchone()
+
+    # Summary lives on the profile row; the parser writes it there and
+    # routes/profile.py edits it there, so there is nothing to derive.
+    profile["summary"] = profile.get("summary")
+
+    return render_template(
+        "profile_review.html",
+        user=user,
+        profile=profile,
+        skills=skills,
+        education=education,
+        experience=experience,
+        projects=projects,
+        certifications=certifications,
+        latest_resume=latest_resume,
+        skill_categories=SKILL_CATEGORIES,
+        record_specs=RECORD_TYPES,
+    )
+
+
+# Post/Redirect/Get back to the review page so a refresh never re-posts an edit.
+def _back_to_review(message: str, error: bool = False):
+    flash(message, "error" if error else "success")
+    return redirect(url_for("resume.review"))
+
+
+@resume_bp.route("/review/save", methods=["POST"])
+def review_save():
+    """Persist one Review Your Profile edit.
+
+    A dedicated route rather than reusing ``profile.edit``, because that view
+    rewrites ``college``, ``degree``, ``passing_year`` and ``experience`` on
+    every submission -- posting a phone-only form from here would silently blank
+    those columns. Each section here owns exactly the columns it edits.
+    """
+    if not _require_login():
+        return redirect(url_for("auth.login"))
+
+    user_id = session["user_id"]
+    section = request.form.get("section", "")
+    form = request.form
+
+    if section == "personal":
+        name = _line(form.get("name"), 255)
+        phone = _line(form.get("phone"), 30)
+        career_status = form.get("career_status")
+        if career_status not in CAREER_STATUSES:
+            career_status = None
+
+        errors = {}
+        if not name:
+            errors["name"] = "Name is required."
+        # Same ten-digit rule as registration, but only when a phone is given.
+        if phone:
+            validated, phone_error = validate_phone(phone)
+            if phone_error:
+                errors["phone"] = phone_error
+            else:
+                phone = validated
+        if errors:
+            flash("; ".join(errors.values()), "error")
+            return redirect(url_for("resume.review"))
+
+        assignments, params = [], []
+        if name:
+            assignments.append("name = %s")
+            params.append(name)
+        if phone is not None:
+            assignments.append("phone = %s")
+            params.append(phone)
+        if career_status:
+            assignments.append("career_status = %s")
+            params.append(career_status)
+
+        if assignments:
+            db = get_db()
+            with db.cursor() as cursor:
+                cursor.execute(
+                    f"UPDATE users SET {', '.join(assignments)} WHERE id = %s",
+                    (*params, user_id),
+                )
+                db.commit()
+            if name:
+                # Keep the shell's greeting in step with the new name.
+                session["user_name"] = name
+        return _back_to_review("Personal information updated.")
+
+    if section == "summary":
+        summary = _block(form.get("summary"), 4000)
+        db = get_db()
+        with db.cursor() as cursor:
+            # Upsert so a user who typed a summary before ever uploading a
+            # resume still gets a profile row rather than a silent no-op.
+            cursor.execute(
+                """
+                INSERT INTO profiles (user_id, summary) VALUES (%s, %s)
+                ON DUPLICATE KEY UPDATE summary = VALUES(summary)
+                """,
+                (user_id, summary),
+            )
+            db.commit()
+        return _back_to_review("Professional summary updated.")
+
+    if section == "skills":
+        skill_id = _positive_int(form.get("skill_id"))
+        name = normalize_skill(form.get("name"))
+        category = form.get("category")
+        if category not in SKILL_CATEGORIES:
+            category = None
+        if not name:
+            return _back_to_review("Skill name cannot be empty.", error=True)
+
+        db = get_db()
+        with db.cursor() as cursor:
+            if skill_id is None:
+                cursor.execute(
+                    "INSERT INTO skills (user_id, name, category) VALUES (%s, %s, %s)",
+                    (user_id, name, category),
+                )
+            else:
+                # user_id in the WHERE clause keeps one user off another's rows.
+                cursor.execute(
+                    "UPDATE skills SET name = %s, category = %s WHERE id = %s AND user_id = %s",
+                    (name, category, skill_id, user_id),
+                )
+                if cursor.rowcount == 0:
+                    return _back_to_review("Skill not found.", error=True)
+            db.commit()
+        return _back_to_review("Skills updated.")
+
+    spec = RECORD_TYPES.get(section)
+    if spec is None:
+        return _back_to_review("Unknown section.", error=True)
+
+    values = {
+        column: (_block(form.get(column), 4000) if limit is None else _line(form.get(column), limit))
+        for column, limit in spec["fields"].items()
+    }
+    if not values[spec["required"]]:
+        return _back_to_review(
+            f"{spec['label']}: {spec['required'].replace('_', ' ')} is required.", error=True
+        )
+
+    record_id = _positive_int(form.get("record_id"))
+    db = get_db()
+    with db.cursor() as cursor:
+        if record_id is None:
+            columns = ["user_id", *values]
+            placeholders = ", ".join(["%s"] * len(columns))
+            cursor.execute(
+                f"INSERT INTO {spec['table']} ({', '.join(columns)}) VALUES ({placeholders})",
+                (user_id, *values.values()),
+            )
+        else:
+            assignments = ", ".join(f"{column} = %s" for column in values)
+            cursor.execute(
+                f"UPDATE {spec['table']} SET {assignments} WHERE id = %s AND user_id = %s",
+                (*values.values(), record_id, user_id),
+            )
+            if cursor.rowcount == 0:
+                return _back_to_review(f"{spec['label']} not found.", error=True)
+        db.commit()
+    return _back_to_review(f"{spec['label']} updated.")
+
+
+def _positive_int(raw) -> int | None:
+    try:
+        value = int(raw or 0)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
+def _line(value, limit: int):
+    return " ".join((value or "").split())[:limit] or None
+
+
+def _block(value, limit: int):
+    return (value or "").strip()[:limit] or None
 
 
 def _save_extracted_profile(db, user_id: int, resume_id: int, extracted: dict) -> None:

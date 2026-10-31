@@ -1,91 +1,233 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "partials/brand.html" import brand_mark %}
+{% block surface_styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
+{% endblock %}
 {% block title %}CareerAI - Your AI-Powered Career Companion{% endblock %}
+{% block body_class %}surface{% endblock %}
+{% block backdrop %}{% include "partials/neural.html" %}{% endblock %}
 {% block content %}
 
-<nav class="navbar">
-    <button class="hamburger" id="hamburger" aria-label="Menu">&#9776;</button>
-    <a href="{{ url_for('landing') }}" class="logo">&#127891; CareerAI</a>
-    <div class="nav-auth">
-        <a href="{{ url_for('auth.login') }}" class="btn btn-outline">Login</a>
-        <a href="{{ url_for('auth.register') }}" class="btn btn-primary">Register</a>
-    </div>
-</nav>
+<div class="sc-shell">
 
-<section class="hero">
-    <div class="hero-text">
-        <p class="eyebrow">Your AI-Powered Career Companion</p>
-        <h1>Get Your <span class="accent">Dream Job</span> and <span class="accent">Internship</span> from Here</h1>
-        <p class="hero-sub">
-            Discover personalized opportunities, build your skills, create professional
-            resumes and cover letters, and get ready for your next big step &mdash; all in one place.
-        </p>
-        <div class="hero-actions">
-            <a href="{{ url_for('auth.register') }}" class="btn btn-primary btn-lg">Get Started &rarr;</a>
-            <a href="{{ url_for('auth.register') }}" class="btn btn-outline btn-lg">Register</a>
-        </div>
-    </div>
-    <div class="hero-art">
-        <div class="hero-illustration" aria-hidden="true">&#128187;</div>
-        <div class="floating-card floating-card-1">&#10024; Better Skills, Brighter Future</div>
-        <div class="floating-pill floating-pill-1">&#128188; Find Jobs</div>
-        <div class="floating-pill floating-pill-2">&#128196; Build Resume</div>
-        <div class="floating-pill floating-pill-3">&#127891; Prepare Interviews</div>
-        <div class="floating-pill floating-pill-4">&#129302; Get AI Support</div>
-    </div>
-</section>
+    {# ---------- Navbar ----------
+       The previous three-dot button toggled a body class no landing rule ever
+       reacted to, so it was a dead control and has been removed. Every control
+       here is a real link to a real route. #}
+    <header class="sc-nav">
+        <div class="sc-container sc-nav__inner">
+            <a href="{{ url_for('landing') }}" class="sc-brand">
+                {{ brand_mark() }}
+                <span>CareerAI</span>
+            </a>
 
-<section class="features">
-    <p class="eyebrow center">Why Choose CareerAI</p>
-    <h2 class="center">Everything You Need for a Successful Career</h2>
-    <p class="section-sub center">
-        From finding the right opportunities to preparing for interviews, we're here
-        to support you at every step of your journey.
-    </p>
+            <nav class="sc-nav__links" aria-label="Primary">
+                <a class="sc-nav__link" href="#features">Features</a>
+                <a class="sc-nav__link" href="#how-it-works">How it works</a>
+            </nav>
 
-    <div class="feature-grid">
-        <div class="feature-card">
-            <div class="feature-icon">&#128269;</div>
-            <h3>Personalized Job Recommendations</h3>
-            <p>Get internship and job suggestions based on your skills, interests, and career goals.</p>
+            <div class="sc-nav__actions">
+                <a href="{{ url_for('auth.login') }}" class="sc-btn sc-btn--ghost">Login</a>
+                <a href="{{ url_for('auth.register') }}" class="sc-btn sc-btn--primary">Get Started</a>
+            </div>
         </div>
-        <div class="feature-card">
-            <div class="feature-icon">&#128196;</div>
-            <h3>Smart Resume &amp; Cover Letter Builder</h3>
-            <p>Create professional resumes and tailored cover letters for each opportunity.</p>
-        </div>
-        <div class="feature-card">
-            <div class="feature-icon">&#127891;</div>
-            <h3>Interview Preparation</h3>
-            <p>Practice with AI-powered questions, get feedback, and build confidence.</p>
-        </div>
-        <div class="feature-card">
-            <div class="feature-icon">&#129302;</div>
-            <h3>AI Career Assistant</h3>
-            <p>Get instant guidance, career tips, and answers to your queries, anytime.</p>
-        </div>
-    </div>
-</section>
+    </header>
 
-<footer class="site-footer">
-    <div class="footer-grid">
-        <div>
-            <p class="footer-logo">&#127891; CareerAI</p>
-            <p>Your smart companion for better opportunities, stronger skills, and a brighter future.</p>
+    {# ---------- Hero ----------
+       The laptop emoji that used to sit here is gone. The right-hand column
+       shows CareerAI's actual product surfaces instead. #}
+    <section class="sc-hero">
+        <div class="sc-container sc-hero__grid">
+            <div>
+                <p class="sc-eyebrow"><span class="sc-eyebrow__dot"></span> Your AI-Powered Career Companion</p>
+                <h1 class="sc-hero__title">
+                    Turn your resume into <em>real opportunities</em>
+                </h1>
+                <p class="sc-hero__sub">
+                    CareerAI reads your resume, matches your verified skills against live
+                    and local job openings, then helps you close every gap &mdash; with a
+                    tailored resume, a cover letter, and interview practice along the way.
+                </p>
+                <div class="sc-hero__actions">
+                    <a href="{{ url_for('auth.register') }}" class="sc-btn sc-btn--primary sc-btn--lg">
+                        Get Started {{ icon('arrow-right') }}
+                    </a>
+                    <a href="{{ url_for('auth.login') }}" class="sc-btn sc-btn--ghost sc-btn--lg">
+                        I already have an account
+                    </a>
+                </div>
+                <ul class="sc-hero__proof">
+                    <li>{{ icon('shield-check') }} Nothing is invented &mdash; every claim is checked against your resume</li>
+                    <li>{{ icon('sparkles') }} AI matching, cover letters and interview feedback</li>
+                </ul>
+            </div>
+
+            <div class="sc-stage">
+                <div class="sc-stage__card">
+                    <div class="sc-stage__head">
+                        <span class="sc-stage__icon">{{ icon('cpu') }}</span>
+                        <span>
+                            <span class="sc-stage__title">Resume parsed</span><br>
+                            <span class="sc-stage__meta">Verified profile extracted from your PDF</span>
+                        </span>
+                    </div>
+                    <div class="sc-stage__chips">
+                        <span class="sc-stage__chip">Python</span>
+                        <span class="sc-stage__chip">SQL</span>
+                        <span class="sc-stage__chip">Power BI</span>
+                        <span class="sc-stage__chip">Machine Learning</span>
+                    </div>
+                </div>
+
+                <div class="sc-stage__card">
+                    <div class="sc-stage__head">
+                        <span class="sc-stage__icon">{{ icon('trending-up') }}</span>
+                        <span>
+                            <span class="sc-stage__title">Skill gap analysis</span><br>
+                            <span class="sc-stage__meta">Data Analyst Intern &middot; 78% profile skill fit</span>
+                        </span>
+                    </div>
+                    <div class="sc-stage__bar"><span style="width:78%"></span></div>
+                </div>
+
+                <div class="sc-stage__card">
+                    <div class="sc-stage__head">
+                        <span class="sc-stage__icon">{{ icon('message-circle') }}</span>
+                        <span>
+                            <span class="sc-stage__title">Career Assistant</span><br>
+                            <span class="sc-stage__meta">Grounded answers from your own profile</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div>
-            <p class="footer-heading">Quick Links</p>
-            <a href="{{ url_for('landing') }}">Home</a>
-            <a href="{{ url_for('auth.login') }}">Login</a>
-            <a href="{{ url_for('auth.register') }}">Register</a>
+    </section>
+
+    {# ---------- Features ---------- #}
+    <section class="sc-section" id="features">
+        <div class="sc-container">
+            <div class="sc-section__head">
+                <p class="sc-eyebrow"><span class="sc-eyebrow__dot"></span> Why CareerAI</p>
+                <h2>Everything you need across your whole career journey</h2>
+                <p>
+                    From finding the right opportunity to walking into the interview,
+                    every tool works from the same verified profile.
+                </p>
+            </div>
+
+            <div class="sc-features">
+                <article class="sc-feature sc-feature--electric">
+                    <span class="sc-feature__icon">{{ icon('search') }}</span>
+                    <h3>Personalized Job Recommendations</h3>
+                    <p>Get internship and job suggestions ranked against the skills your resume actually lists.</p>
+                </article>
+
+                <article class="sc-feature">
+                    <span class="sc-feature__icon">{{ icon('file-text') }}</span>
+                    <h3>Smart Resume &amp; Cover Letter Builder</h3>
+                    <p>Create an ATS-friendly resume and a tailored cover letter for each opportunity you apply to.</p>
+                </article>
+
+                <article class="sc-feature sc-feature--dark">
+                    <span class="sc-feature__icon">{{ icon('mic') }}</span>
+                    <h3>Interview Preparation</h3>
+                    <p>Practice with role-specific questions and get feedback grounded in the answer you gave.</p>
+                </article>
+
+                <article class="sc-feature">
+                    <span class="sc-feature__icon">{{ icon('message-circle') }}</span>
+                    <h3>AI Career Assistant</h3>
+                    <p>Ask anything about your profile, target role, skill gaps, and saved conversations.</p>
+                </article>
+            </div>
         </div>
-        <div>
-            <p class="footer-heading">Support</p>
-            <a href="#">Help Center</a>
-            <a href="#">FAQs</a>
-            <a href="#">Privacy Policy</a>
+    </section>
+
+    {# ---------- How it works ---------- #}
+    <section class="sc-section" id="how-it-works">
+        <div class="sc-container">
+            <div class="sc-section__head">
+                <h2>Four steps from upload to offer</h2>
+                <p>The same pipeline runs every time, so nothing you have already entered has to be typed twice.</p>
+            </div>
+
+            <div class="sc-steps">
+                <div class="sc-step">
+                    <span class="sc-step__num">1</span>
+                    <h3>Create your account</h3>
+                    <p>Register once. Your profile is stored against your own account only.</p>
+                </div>
+                <div class="sc-step">
+                    <span class="sc-step__num">2</span>
+                    <h3>Upload and review</h3>
+                    <p>CareerAI extracts your details and shows them back to you to confirm or correct.</p>
+                </div>
+                <div class="sc-step">
+                    <span class="sc-step__num">3</span>
+                    <h3>Match and close the gap</h3>
+                    <p>See exactly which skills a role needs that you do not have yet.</p>
+                </div>
+                <div class="sc-step">
+                    <span class="sc-step__num">4</span>
+                    <h3>Apply and prepare</h3>
+                    <p>Generate the resume and letter, then practise with mock interviews.</p>
+                </div>
+            </div>
         </div>
-    </div>
-    <p class="footer-copy">&copy; 2026 CareerAI. All rights reserved.</p>
-</footer>
+    </section>
+
+    {# ---------- Closing CTA ---------- #}
+    <section class="sc-section">
+        <div class="sc-container">
+            <div class="sc-cta">
+                <h2>Ready to see where you fit?</h2>
+                <p>Upload one resume. Get a full career plan built from it.</p>
+                <div class="sc-cta__actions">
+                    <a href="{{ url_for('auth.register') }}" class="sc-btn sc-btn--light sc-btn--lg">
+                        Create your free account
+                    </a>
+                    <a href="{{ url_for('auth.login') }}" class="sc-btn sc-btn--ghost sc-btn--lg">
+                        Login
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {# ---------- Footer ----------
+       The former Help Center / FAQs / Privacy Policy entries pointed at href="#"
+       and did nothing. They are gone rather than replaced with new dead links;
+       every remaining link resolves to a real route. #}
+    <footer class="sc-footer">
+        <div class="sc-container">
+            <div class="sc-footer__grid">
+                <div>
+                    <span class="sc-footer__brand">{{ brand_mark() }} CareerAI</span>
+                    <p class="sc-footer__tagline">
+                        Your smart companion for better opportunities, stronger skills,
+                        and a brighter future.
+                    </p>
+                </div>
+                <div>
+                    <p class="sc-footer__heading">Product</p>
+                    <div class="sc-footer__list">
+                        <a href="#features">Features</a>
+                        <a href="#how-it-works">How it works</a>
+                    </div>
+                </div>
+                <div>
+                    <p class="sc-footer__heading">Account</p>
+                    <div class="sc-footer__list">
+                        <a href="{{ url_for('auth.login') }}">Login</a>
+                        <a href="{{ url_for('auth.register') }}">Register</a>
+                        <a href="{{ url_for('auth.forgot_password') }}">Forgot password</a>
+                    </div>
+                </div>
+            </div>
+            <p class="sc-footer__copy">&copy; 2026 CareerAI. All rights reserved.</p>
+        </div>
+    </footer>
+</div>
 
 {% endblock %}

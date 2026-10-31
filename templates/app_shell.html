@@ -1,52 +1,86 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
+{# notification_unread_count is injected by the shell context processor, so every
+   authenticated page gets the bell badge without touching its own route. #}
+{% block surface_styles %}
+{# App design system. Loaded here, and only here, so the public marketing and
+   auth pages keep their own stylesheet and nothing is duplicated. #}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+{% endblock %}
 {% block content %}
 
+{# The collapsed state is restored from localStorage by a script in <head>
+   (see base.html), before this markup is even parsed. Applying it here on
+   DOMContentLoaded was one frame too late: the sidebar painted expanded and
+   then collapsed, which read as a flicker on every navigation. #}
 <div class="app-shell" id="appShell">
-    
 
+    {# The sidebar is always visible. It has two states -- expanded (icon +
+       label) and collapsed (icon only, with the label revealed as a tooltip on
+       hover) -- so no navigation destination is ever hidden. On a phone it
+       reverts to the original overlay driven by .sidebar-open. #}
     <aside class="app-sidebar" id="appSidebar">
         <div class="sidebar-top">
             <div class="sidebar-logo">
-                <span class="sidebar-logo-mark">{{ icon('book-open') }}</span> CareerAI
+                <span class="sidebar-logo-mark">{{ icon('book-open') }}</span>
+                <span class="sidebar-label">CareerAI</span>
             </div>
+            {# Directional arrow rather than a three-dot menu. It sits in its
+               own flex slot with flex-shrink:0 and an explicit gap, so it
+               cannot overlap or visually merge into the wordmark. The icon
+               rotates 180 degrees when the sidebar is collapsed. #}
+            <button type="button" class="sidebar-collapse" id="sidebarCollapse"
+                    onclick="toggleSidebar()" aria-label="Collapse sidebar"
+                    aria-controls="appSidebar" aria-expanded="true">
+                <span class="sidebar-collapse-icon" aria-hidden="true">{{ icon('chevron-left') }}</span>
+            </button>
             <button type="button" class="sidebar-close" onclick="closeSidebar()" aria-label="Close menu">
                 {{ icon('x', 'icon-sm') }}
             </button>
         </div>
 
+        {# data-label drives the collapsed-state tooltip; the visible label text
+           sits in a .sidebar-label span so CSS can hide exactly that. #}
         <nav class="sidebar-nav">
-            <a href="{{ url_for('home.dashboard') }}" class="{{ 'active' if active_page == 'home' else '' }}">
-                {{ icon('home') }} Home
+            <a href="{{ url_for('home.dashboard') }}" data-label="Home" title="Home"
+               class="{{ 'active' if active_page == 'home' else '' }}">
+                {{ icon('home') }} <span class="sidebar-label">Home</span>
             </a>
-            <a href="{{ url_for('profile.view') }}" class="{{ 'active' if active_page == 'profile' else '' }}">
-                {{ icon('user') }} My Profile
+            <a href="{{ url_for('profile.view') }}" data-label="My Profile" title="My Profile"
+               class="{{ 'active' if active_page == 'profile' else '' }}">
+                {{ icon('user') }} <span class="sidebar-label">My Profile</span>
             </a>
-            <a href="{{ url_for('opportunities.list_view') }}" class="{{ 'active' if active_page == 'opportunities' else '' }}">
-                {{ icon('briefcase') }} Opportunities
+            <a href="{{ url_for('opportunities.list_view') }}" data-label="Opportunities" title="Opportunities"
+               class="{{ 'active' if active_page == 'opportunities' else '' }}">
+                {{ icon('briefcase') }} <span class="sidebar-label">Opportunities</span>
             </a>
-            <a href="{{ url_for('skill_gap.view') }}" class="{{ 'active' if active_page == 'skill_gap' else '' }}">
-                {{ icon('search') }} Skill Gap
+            <a href="{{ url_for('skill_gap.view') }}" data-label="Skill Gap" title="Skill Gap"
+               class="{{ 'active' if active_page == 'skill_gap' else '' }}">
+                {{ icon('search') }} <span class="sidebar-label">Skill Gap</span>
             </a>
-            <a href="{{ url_for('applications.list_view') }}" class="{{ 'active' if active_page == 'applications' else '' }}">
-                {{ icon('file-text') }} My Applications
+            <a href="{{ url_for('applications.list_view') }}" data-label="My Applications" title="My Applications"
+               class="{{ 'active' if active_page == 'applications' else '' }}">
+                {{ icon('file-text') }} <span class="sidebar-label">My Applications</span>
             </a>
-            <a href="{{ url_for('interview.view') }}" class="{{ 'active' if active_page == 'interview' else '' }}">
-                {{ icon('mic') }} Interview Preparation
+            <a href="{{ url_for('interview.view') }}" data-label="Interview Preparation" title="Interview Preparation"
+               class="{{ 'active' if active_page == 'interview' else '' }}">
+                {{ icon('mic') }} <span class="sidebar-label">Interview Preparation</span>
             </a>
-
-                        <a href="{{ url_for('resume_builder.view') }}" class="{{ 'active' if active_page == 'resume_builder' else '' }}">
-                {{ icon('file-text') }} Resume Builder
+            <a href="{{ url_for('resume_builder.view') }}" data-label="Resume Builder" title="Resume Builder"
+               class="{{ 'active' if active_page == 'resume_builder' else '' }}">
+                {{ icon('file-text') }} <span class="sidebar-label">Resume Builder</span>
             </a>
-            <a href="{{ url_for('cover_letter.view') }}" class="{{ 'active' if active_page == 'cover_letter' else '' }}">
-                {{ icon('mail') }} Cover Letter
+            <a href="{{ url_for('cover_letter.view') }}" data-label="Cover Letter" title="Cover Letter"
+               class="{{ 'active' if active_page == 'cover_letter' else '' }}">
+                {{ icon('mail') }} <span class="sidebar-label">Cover Letter</span>
             </a>
-            <a href="{{ url_for('assistant.view') }}" class="{{ 'active' if active_page == 'assistant' else '' }}">
-                {{ icon('message-circle') }} Career Assistant
+            <a href="{{ url_for('assistant.view') }}" data-label="Career Assistant" title="Career Assistant"
+               class="{{ 'active' if active_page == 'assistant' else '' }}">
+                {{ icon('message-circle') }} <span class="sidebar-label">Career Assistant</span>
             </a>
         </nav>
 
-        <div class="sidebar-footer-card">
+        <div class="sidebar-footer-card sidebar-label">
             <p class="sidebar-footer-title">Your Career Journey Matters</p>
             <p class="sidebar-footer-text">Keep learning, keep growing. We're here to support you!</p>
             <a href="{{ url_for('interview.view') }}">Start preparing {{ icon('arrow-right', 'icon-sm') }}</a>
@@ -54,19 +88,35 @@
     </aside>
 
     <div class="app-main-wrap">
+        {# Three explicit slots so the search stays horizontally centred no
+           matter how wide the left or right cluster is. Previously it was
+           flex:1 after the hamburger, which pushed it off-centre. #}
         <header class="app-topbar">
-            <button type="button" class="hamburger-btn" onclick="openSidebar()" aria-label="Open menu">
-                {{ icon('menu') }}
-            </button>
+            <div class="topbar-slot topbar-slot--start">
+                <button type="button" class="hamburger-btn" onclick="openSidebar()" aria-label="Open menu">
+                    {{ icon('menu') }}
+                </button>
+            </div>
 
-            <form class="topbar-search" method="GET" action="{{ url_for('opportunities.list_view') }}">
+            <form class="topbar-search" method="GET" action="{{ url_for('opportunities.list_view') }}"
+                  role="search">
                 <span class="topbar-search-icon">{{ icon('search', 'icon-sm') }}</span>
-                <input type="text" name="q" placeholder="Search jobs, internships, skills..."
+                <input type="text" name="q" aria-label="Search jobs, internships and skills"
+                       placeholder="Search jobs, internships, skills..."
                        value="{{ request.args.get('q', '') }}">
             </form>
 
-            <div class="topbar-right">
-                <span class="topbar-bell">{{ icon('bell') }}<span class="dot"></span></span>
+            <div class="topbar-slot topbar-slot--end topbar-right">
+                {# Notification drawer: a right-side panel, not a floating popup.
+                   The bell keeps the same position, icon, and unread badge. #}
+                <button type="button" class="topbar-bell" id="notificationBell"
+                        onclick="toggleNotifications(event)" aria-label="Notifications"
+                        aria-haspopup="dialog" aria-expanded="false"
+                        aria-controls="notificationDrawer">
+                    {{ icon('bell') }}
+                    <span class="notification-badge{% if not notification_unread_count %} is-hidden{% endif %}"
+                          id="notificationBadge">{{ notification_unread_count }}</span>
+                </button>
 
                 <div class="profile-menu">
                     <button type="button" class="topbar-user" onclick="toggleProfileMenu(event)">
@@ -85,6 +135,28 @@
         <main class="app-main">
             {% block app_content %}{% endblock %}
         </main>
+
+        {# Footer lives inside .app-main-wrap rather than beside it, so its
+           width always follows the sidebar's collapsed/expanded state with no
+           second width rule to keep in sync. #}
+        <footer class="app-footer">
+            <div class="app-footer__inner">
+                <span class="app-footer__brand">{{ icon('book-open') }} CareerAI</span>
+
+                <p class="app-footer__note">
+                    Job matches are ranked against the skills in your profile.
+                    Skill Fit is a comparison of your skills against a role's requirements, not a chance of an offer.
+                </p>
+
+                <nav class="app-footer__links" aria-label="Footer">
+                    <a href="{{ url_for('home.dashboard') }}">Home</a>
+                    <a href="{{ url_for('opportunities.list_view') }}">Opportunities</a>
+                    <a href="{{ url_for('applications.list_view') }}">Applications</a>
+                    <a href="{{ url_for('profile.view') }}">My Profile</a>
+                    <a href="{{ url_for('auth.logout') }}">Logout</a>
+                </nav>
+            </div>
+        </footer>
     </div>
 
     {# Single global launcher. Fixed to the viewport's bottom-right corner, so it
@@ -98,5 +170,8 @@
     </a>
     {% endif %}
 </div>
+
+{% include "partials/notifications_drawer.html" %}
+{% include "partials/notifications_script.html" %}
 
 {% endblock %}

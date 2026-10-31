@@ -78,9 +78,17 @@ def test_opportunities_page_labels_score_and_shows_reasons(app, client, candidat
 
     assert response.status_code == 200
     assert b"Skill Fit" in response.data
-    assert b"Why this matches" in response.data
-    assert b"not an overall probability" in response.data
+    assert b"not a probability of getting the job" in response.data
     assert b"JavaScript" in response.data
+
+    # The reasoning itself is rendered by the dialog rather than on every card,
+    # so it is asserted where it now lives. The reasons are still carried into
+    # the dialog per job.
+    modal_js = open("static/js/job_modal.js", encoding="utf-8").read()
+    assert "Why this matches your profile" in modal_js
+    assert "Skills fit" in modal_js
+    html = response.get_data(as_text=True)
+    assert "data-match-reasons=" in html
 
 
 def test_dashboard_uses_profile_skill_fit_label(app, client, candidate):
@@ -131,8 +139,8 @@ def test_dashboard_and_opportunities_use_shared_recommendation_logic(
     assert opportunities_response.status_code == 200
     assert dashboard_response.status_code == 200
     # Both pages go through the same shared recommend_jobs(); Opportunities
-    # asks for 20, the Dashboard asks for 10.
-    assert [call["top_k"] for call in calls] == [20, 10]
+    # asks for 20, the Dashboard asks for exactly the nine cards it renders.
+    assert [call["top_k"] for call in calls] == [20, 9]
     assert b"Skill Fit" in opportunities_response.data
     assert b"Skill Fit" in dashboard_response.data
 

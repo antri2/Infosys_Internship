@@ -5,12 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}CareerAI{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {# Public-surface design system. Loaded ONLY by the marketing and auth
+       templates that override this block, so the authenticated app shell never
+       even downloads it -- the app's own styles are untouched by construction
+       rather than by relying on class names not colliding. #}
+    {% block surface_styles %}{% endblock %}
+
+    {# Runs before the body is parsed, so a collapsed sidebar never paints in
+       its expanded state first. Kept inline and tiny on purpose; main.js takes
+       over once the buttons exist. Wrapped in try/catch because localStorage
+       throws in private browsing. #}
+    <script>
+    (function () {
+        try {
+            if (localStorage.getItem('careerai:sidebar-collapsed') === '1') {
+                document.documentElement.classList.add('sidebar-collapsed');
+            }
+        } catch (error) { /* private browsing: stay expanded */ }
+    })();
+    </script>
 </head>
-<body>
-    {% with messages = get_flashed_messages() %}
+<body class="{% block body_class %}{% endblock %}">
+    {% block backdrop %}{% endblock %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-            <div class="flash-banner">
-                {% for message in messages %}<p>{{ message }}</p>{% endfor %}
+            {# Categories already in use: "error" for a rejected action, the
+               default for a confirmation. #}
+            <div class="flash-banner{% for category in messages %}{% if category[0] == 'error' %} flash-banner--error{% endif %}{% endfor %}">
+                {% for category, message in messages %}<p>{{ message }}</p>{% endfor %}
             </div>
         {% endif %}
     {% endwith %}

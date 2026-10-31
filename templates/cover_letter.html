@@ -4,7 +4,21 @@
 
 <div class="page-head">
     <h1>Cover Letter</h1>
-    <p>Create a professional, editable cover letter. It is generic by default; add any target details you want the letter to use.</p>
+    <p>Create a professional, editable cover letter for a target role. Add a company or job description to tailor it further.</p>
+</div>
+
+{# Read-only reading view for a saved letter. Deliberately separate from the
+   editor: viewing a letter must never be able to overwrite what the user is
+   currently editing. #}
+<div class="cl-view" id="cover-letter-view" hidden>
+    <div class="cl-view__head">
+        <div>
+            <h2 class="cl-view__title" id="cover-letter-view-title"></h2>
+            <p class="cl-view__meta" id="cover-letter-view-meta"></p>
+        </div>
+        <button type="button" class="ai-btn ai-btn--ghost" id="close-cover-letter-view">Close</button>
+    </div>
+    <pre class="cl-view__body" id="cover-letter-view-body"></pre>
 </div>
 
 <div class="dash-card">
@@ -45,7 +59,7 @@
 
 <div class="dash-card" style="margin-top:20px;">
     <div class="dash-card-head">
-        <h3>Generated Letter Editor</h3>
+        <h3 id="cover-letter-editor-heading">{{ selected_letter_heading if selected_letter else 'Letter Editor' }}</h3>
         <span id="cover-letter-fallback-status" class="status-badge under_review" hidden>AI fallback used</span>
     </div>
     <input id="cover-letter-id" type="hidden" value="{{ selected_letter.id if selected_letter else '' }}">
@@ -64,19 +78,35 @@
 <div class="dash-card" style="margin-top:20px;">
     <div class="dash-card-head"><h3>Previously Saved Letters</h3></div>
     <p class="muted">Load a saved letter to view or edit it. Only your own saved letters are shown.</p>
+    <p class="muted">
+        <strong>View Letter</strong> reads a saved letter without changing your editor.
+        <strong>Load Letter</strong> opens it in the editor so you can change and save it.
+    </p>
     {% if letters %}
+        <ul class="cl-list">
         {% for letter in letters %}
-        <div class="saved-cover-letter" style="border-top:1px solid var(--border);padding:12px 0;">
-            <button type="button" class="btn btn-outline load-cover-letter" data-letter-id="{{ letter.id }}" style="margin-bottom:7px;">Load Letter</button>
-            {% if letter.job_title %}
-                <p><strong>{{ letter.job_title }}</strong>{% if letter.job_company %} — {{ letter.job_company }}{% endif %}</p>
-            {% else %}
-                <p><strong>Generic Cover Letter</strong></p>
-            {% endif %}
-            <p class="muted">{% if letter.created_at %}Saved {{ letter.created_at }}{% endif %}</p>
-            <p class="muted">{{ letter.content|truncate(180, true, '…') }}</p>
-        </div>
+            <li class="saved-cover-letter cl-list__item">
+                {# The heading comes from letter_heading(), so a role-specific
+                   generic letter is identified by its role rather than by the
+                   ambiguous bare wording. #}
+                <h4 class="cl-list__heading">{{ letter_headings.get(letter.id, letter.job_title or 'Generic Cover Letter') }}</h4>
+                <p class="cl-list__meta">{% if letter.created_at %}Saved {{ letter.created_at }}{% endif %}</p>
+                <p class="cl-list__excerpt">{{ letter.content|truncate(180, true, '…') }}</p>
+                <div class="cl-list__actions">
+                    {# The endpoint each button calls is rendered here rather
+                       than assembled by string replacement in JS, so it cannot
+                       drift from the route. #}
+                    <button type="button" class="ai-btn ai-btn--quiet view-cover-letter"
+                            data-letter-id="{{ letter.id }}"
+                            data-letter-url="{{ url_for('cover_letter.load', letter_id=letter.id) }}"
+                            aria-controls="cover-letter-view">View Letter</button>
+                    <button type="button" class="ai-btn ai-btn--ghost load-cover-letter"
+                            data-letter-id="{{ letter.id }}"
+                            data-letter-url="{{ url_for('cover_letter.load', letter_id=letter.id) }}">Load Letter</button>
+                </div>
+            </li>
         {% endfor %}
+        </ul>
     {% else %}
         <p class="muted">No saved cover letters yet.</p>
     {% endif %}
@@ -169,6 +199,20 @@
 
     function applyGenerated(data, preserveId) {
         editor.value = data.cover_letter || data.content || '';
+        // Label the editor by the role that produced the draft, so a
+        // role-specific letter is never presented as role-less.
+        const heading = document.getElementById('cover-letter-editor-heading');
+        if (heading) {
+            const role = (roleSelect && roleSelect.value || '').trim();
+            const jobTitle = data.job && data.job.title;
+            if (jobTitle) {
+                heading.textContent = 'Cover Letter / ' + jobTitle;
+            } else if (role) {
+                heading.textContent = 'Generic Cover Letter / ' + role;
+            } else {
+                heading.textContent = 'Letter Editor';
+            }
+        }
         if (!preserveId) letterId.value = data.letter_id || '';
         fallbackStatus.hidden = !data.used_fallback;
         renderFacts(data.highlighted_verified_facts || []);
@@ -249,11 +293,61 @@
         finally { setBusy(false); }
     });
 
+    /* ---- View Letter ----
+       Reads a saved letter into a read-only panel. It deliberately does not
+       touch the editor, so viewing can never overwrite work in progress. It
+       uses the same existing load endpoint as Load Letter, so there is no new
+       route and no new data path. */
+    const view = document.getElementById('cover-letter-view');
+    const viewTitle = document.getElementById('cover-letter-view-title');
+    const viewMeta = document.getElementById('cover-letter-view-meta');
+    const viewBody = document.getElementById('cover-letter-view-body');
+    const closeView = document.getElementById('close-cover-letter-view');
+
+    function hideView() {
+        if (view) view.hidden = true;
+    }
+
+    if (closeView) closeView.addEventListener('click', hideView);
+
+    function showView(letter) {
+        if (!view) return;
+        viewTitle.textContent = letter.heading || letter.job_title || 'Cover Letter';
+        const bits = [];
+        if (letter.job_company) bits.push(letter.job_company);
+        if (letter.target_role) bits.push('Target role: ' + letter.target_role);
+        if (letter.created_at) bits.push('Saved ' + letter.created_at);
+        viewMeta.textContent = bits.join(' \u00b7 ');
+        // textContent, never innerHTML: a saved letter is user-editable text
+        // and must render as text, not markup.
+        viewBody.textContent = letter.content || '';
+        view.hidden = false;
+        closeView.focus();
+    }
+
+    document.querySelectorAll('.view-cover-letter').forEach(button => {
+        button.addEventListener('click', async () => {
+            setBusy(true);
+            try {
+                if (!button.dataset.letterUrl) throw new Error('This letter could not be opened.');
+                const data = await requestJson(button.dataset.letterUrl, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
+                const letter = data.letter || data;
+                showView(letter);
+                showStatus('Showing the saved letter. Your editor is unchanged.');
+            } catch (error) { showStatus(error.message); }
+            finally { setBusy(false); }
+        });
+    });
+
+    /* ---- Load Letter ----
+       Opens the letter in the editor for editing. Unchanged behaviour: the
+       same endpoint, the same field updates, the same message. */
     document.querySelectorAll('.load-cover-letter').forEach(button => {
         button.addEventListener('click', async () => {
             setBusy(true);
             try {
-                const data = await requestJson(`{{ url_for("cover_letter.load", letter_id=0) }}`.replace('/0/', `/${button.dataset.letterId}/`), { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
+                if (!button.dataset.letterUrl) throw new Error('This letter could not be loaded.');
+                const data = await requestJson(button.dataset.letterUrl, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
                 const letter = data.letter || data;
                 editor.value = letter.content || '';
                 letterId.value = String(letter.id || letter.letter_id || '');
@@ -272,7 +366,13 @@
                 renderFacts([]);
                 renderFlags([]);
                 fallbackStatus.hidden = true;
-                showStatus('Saved letter loaded. Edits will not be saved until you click Save Letter.');
+                const heading = document.getElementById('cover-letter-editor-heading');
+                if (heading) {
+                    heading.textContent = letter.heading
+                        || (letter.job_title ? 'Cover Letter / ' + letter.job_title : 'Letter Editor');
+                }
+                hideView();
+                showStatus('Saved letter loaded into the editor. Edits will not be saved until you click Save Letter.');
             } catch (error) { showStatus(error.message); }
             finally { setBusy(false); }
         });

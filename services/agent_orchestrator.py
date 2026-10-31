@@ -515,8 +515,16 @@ class AgentOrchestrator:
         letter_id: int,
         job_id: int | None = None,
         extra_context: str = "",
+        inherit_saved_job: bool = True,
     ) -> dict:
-        """Explicitly generate a fresh version without overwriting the saved row."""
+        """Explicitly generate a fresh version without overwriting the saved row.
+
+        ``inherit_saved_job`` controls whether a regeneration with no explicit
+        job may fall back to the job stored on the saved letter. Callers set it
+        to False when the user has explicitly asked for a role-only or general
+        letter, so a previously used company/job description cannot silently
+        reappear in the new draft.
+        """
         normalized_letter_id = self._cover_letter_id(letter_id)
         saved = cover_letter_agent.load_cover_letter(
             self.db, self.user_id, normalized_letter_id
@@ -531,12 +539,10 @@ class AgentOrchestrator:
             if saved_job_id is None or int(saved_job_id) != requested_job_id:
                 raise ValueError("The selected job does not match the saved letter.")
             normalized_job_id = requested_job_id
+        elif inherit_saved_job and saved_job_id not in (None, ""):
+            normalized_job_id = self._cover_letter_job_id(saved_job_id)
         else:
-            normalized_job_id = (
-                None
-                if saved_job_id in (None, "")
-                else self._cover_letter_job_id(saved_job_id)
-            )
+            normalized_job_id = None
         result = self.generate_cover_letter(normalized_job_id, extra_context)
         result["regenerated_from_letter_id"] = normalized_letter_id
         return result
@@ -546,8 +552,14 @@ class AgentOrchestrator:
         content: str,
         job_id: int | None,
         letter_id: int | None = None,
+        target_role: str | None = None,
     ) -> dict:
-        """Persist exact edited text; this method never invokes the LLM."""
+        """Persist exact edited text; this method never invokes the LLM.
+
+        `target_role` records which role a generic letter was written for, so
+        the saved list can identify it by role rather than by a bare
+        "Generic Cover Letter".
+        """
         normalized_letter_id = (
             self._cover_letter_id(letter_id) if letter_id not in (None, "") else None
         )
@@ -579,12 +591,19 @@ class AgentOrchestrator:
         )
         if normalized_job_id is not None and job is None:
             raise ValueError(f"Job {normalized_job_id} was not found.")
+        # When updating, keep the role an earlier save recorded unless a new one
+        # is supplied, so saving an edit cannot erase the letter's identity.
+        effective_role = target_role
+        if effective_role in (None, "") and saved is not None:
+            effective_role = saved.get("target_role")
+
         saved_id = cover_letter_agent.save_cover_letter(
             self.db,
             self.user_id,
             normalized_job_id,
             content,
             letter_id=normalized_letter_id,
+            target_role=effective_role,
         )
         row = cover_letter_agent.load_cover_letter(self.db, self.user_id, saved_id)
         if row is None:
@@ -597,6 +616,7 @@ class AgentOrchestrator:
             "content": content,
             "job_id": normalized_job_id,
             "job": self._cover_letter_job_payload(job),
+            "target_role": row.get("target_role") or "",
             "created_at": row.get("created_at"),
             "updated_at": row.get("updated_at"),
             "saved": True,
@@ -835,6 +855,11 @@ class AgentOrchestrator:
             history=history,
         )
         result = career_assistant_agent.answer_question(message, context)
+        # Name the conversation after its opening question so the sidebar has a
+        # real title without the user having to write one.
+        career_assistant_agent.ensure_session_title(
+            self.db, self.user_id, session["id"], message
+        )
         career_assistant_agent.append_message(
             self.db, self.user_id, session["id"], "user", message, result["intent"]
         )
@@ -881,3 +906,16 @@ class AgentOrchestrator:
             self.db, self.user_id, {"job_id": None, "target_role": "", "pasted_jd": ""}
         )
         return {"session_id": session_id, "context": {}, "messages": []}
+
+    def list_career_conversations(self, limit: int = 50) -> list[dict]:
+        """Every conversation for this user, most recently active first."""
+        return career_assistant_agent.list_conversations(self.db, self.user_id, limit)
+
+    def rename_career_conversation(self, session_id: int, title: str) -> bool:
+        return career_assistant_agent.rename_session(
+            self.db, self.user_id, session_id, title
+        )
+
+    def delete_career_conversation(self, session_id: int) -> bool:
+        """Delete one conversation. Cascades to its messages and context."""
+        return career_assistant_agent.delete_session(self.db, self.user_id, session_id)

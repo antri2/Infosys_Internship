@@ -154,4 +154,4 @@ def test_missing_job_returns_json_404(app, client):
 
     assert response.status_code == 404
     assert response.is_json
-    assert "does not exist in MySQL" in response.get_json()["error"]
+    assert "could not be found" in response.get_json()["error"]

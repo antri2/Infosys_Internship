@@ -51,6 +51,13 @@ MAX_QUESTIONS = 20
 MAX_TARGET_ROLE_LENGTH = 120
 MAX_TEXT_LENGTH = 4000
 MAX_ANSWER_LENGTH = 6000
+
+# Answer evaluation: one retry is enough to correct topic drift without making
+# the user wait through repeated model calls.
+EVALUATION_MAX_ATTEMPTS = 2
+# The configured model is a reasoning model, so a tight budget leaves nothing
+# for the actual feedback payload.
+EVALUATION_MAX_TOKENS = 6000
 MAX_TIP_LENGTH = 400
 
 _ALLOWED_QUESTION_FIELDS = {
@@ -1654,33 +1661,198 @@ def evaluate_interview_answer(
         candidate=json.dumps(verified_payload, ensure_ascii=False, default=str),
         context_block=job_block,
     )
-    try:
-        raw = generate(prompt, max_tokens=1800, temperature=0.3)
-        data = extract_json_object(raw)
+
+    fallback = _fallback_evaluation(candidate, target_role, question, user_answer)
+    reference = _evaluation_reference_terms(question, user_answer, target_role)
+    last_reason = "unusable model output"
+
+    # A bounded retry: the model occasionally answers a neighbouring topic, and
+    # one retry with the drift named is cheap compared to showing the candidate
+    # feedback about churn prediction when they asked about decision trees.
+    for attempt in range(EVALUATION_MAX_ATTEMPTS):
+        attempt_prompt = prompt if attempt == 0 else (
+            f"{prompt}\n\nCORRECTION: the previous attempt drifted onto a different "
+            f"topic. Judge ONLY the question and answer quoted above. Do not "
+            f"mention any other subject."
+        )
+        try:
+            raw = generate(
+                attempt_prompt,
+                max_tokens=EVALUATION_MAX_TOKENS,
+                temperature=0.3,
+            )
+            data = extract_json_object(raw)
+        except Exception:
+            last_reason = "model call failed"
+            continue
+
         did_well = _clean_bullet_list(data.get("did_well"))
         improve = _clean_bullet_list(data.get("improve"))
         suggested = _clean_text(data.get("suggested_answer"))
         guidance = _clean_text(data.get("how_to_improve"))
+        if not isinstance(data.get("how_to_improve"), str):
+            # Models often return guidance as a list of steps. Joining it is
+            # strictly better than silently discarding it and falling back.
+            steps = _clean_bullet_list(data.get("how_to_improve"))
+            guidance = "\n".join(f"{i}. {step}" for i, step in enumerate(steps, 1)) or None
+
         if not did_well and not improve and not suggested:
-            raise ValueError("Evaluation model output was not usable.")
-        # Feedback must not restate unverified experience as the candidate's.
+            last_reason = "model returned no feedback"
+            continue
+
         feedback_text = " ".join([*did_well, *improve, suggested or "", guidance or ""])
         if _contains_unverified_candidate_claim(feedback_text, candidate):
-            return _fallback_evaluation(candidate, target_role, question, user_answer)
+            last_reason = "feedback restated unverified experience"
+            continue
+        if not _is_feedback_relevant(feedback_text, reference):
+            last_reason = "feedback drifted onto a different topic"
+            continue
+
         return {
             "did_well": did_well or ["You attempted the question, which is the right starting point."],
             "improve": improve or ["Add a specific example and close with a practical use case."],
-            "suggested_answer": suggested or _fallback_evaluation(
-                candidate, target_role, question, user_answer
-            )["suggested_answer"],
-            "how_to_improve": guidance or _fallback_evaluation(
-                candidate, target_role, question, user_answer
-            )["how_to_improve"],
+            "suggested_answer": suggested or fallback["suggested_answer"],
+            "how_to_improve": guidance or fallback["how_to_improve"],
             "score": _clean_score(data.get("score")),
             "used_fallback": False,
         }
-    except Exception:
-        return _fallback_evaluation(candidate, target_role, question, user_answer)
+
+    # Every attempt was rejected, so fall back to deterministic feedback that is
+    # built from this exact question rather than generic advice.
+    fallback["rejection_reason"] = last_reason
+    return fallback
+
+
+# Vocabulary that belongs to the craft of giving feedback rather than to any
+# particular subject. Terse, correct feedback ("You defined the concept
+# clearly") is made entirely of these words, so it must not be treated as drift.
+_GENERIC_FEEDBACK_TERMS = {
+    "answer", "answers", "answered", "answering", "question", "questions",
+    "response", "respond", "responds", "explanation", "explain", "explains",
+    "explained", "explaining", "describe", "describes", "described", "define",
+    "defines", "defined", "defining", "definition", "concept", "concepts",
+    "example", "examples", "detail", "details", "detailed", "specifically",
+    "point", "points", "clear", "clearly", "concise", "concisely", "brief",
+    "thorough", "thoroughly", "depth", "insight", "practical", "real", "world",
+    "correct", "correctly", "incorrect", "inaccurate", "accurate", "accuracy",
+    "relevant", "irrelevant", "complete", "completely", "incomplete",
+    "strong", "stronger", "weak", "weaker", "good", "better", "best", "worse",
+    "poor", "great", "excellent", "improve", "improves", "improvement",
+    "improving", "missing", "lack", "lacks", "lacking", "add", "adds",
+    "adding", "include", "includes", "including", "mention", "mentions",
+    "mentioning", "consider", "considers", "focus", "focuses", "clarify",
+    "clarifies", "structure", "organized", "organisation", "show", "shows",
+    "showing", "demonstrate", "demonstrates", "demonstrating", "evidence",
+    "step", "steps", "summary", "summarize", "summarises", "conclusion",
+    "practicality", "level", "depth", "analytical", "analysis", "reasoning",
+    "reason", "because", "therefore", "however", "overall", "first", "second",
+    "third", "next", "more", "less", "most", "least", "some", "many", "much",
+    "additionally", "finally", "also", "would", "could", "should", "might",
+    "can", "will", "not", "never", "always", "attempt", "attempts",
+    "attempted", "substantive", "opening", "closing", "closeness", "trade",
+    "tradeoff", "tradeoffs", "limitation", "limitations", "edge", "case",
+    "cases", "yours", "attempting", "starting", "point", "statement",
+    # Interview domain vocabulary: true of any interview question, so never
+    # evidence that feedback drifted onto a different subject.
+    "interview", "interviewer", "interviews", "candidate", "candidates",
+    "behavioral", "behavioural", "coding", "conceptual", "technical",
+    "fundamentals", "fundamental", "hr", "situational", "hiring", "role",
+    "roles", "position", "positions", "company", "companies", "team",
+    "teams", "workplace", "recruiter", "recruitment",
+    # Plain descriptors that describe writing rather than a subject.
+    "short", "shorter", "long", "longer", "brief", "briefly", "structured",
+    "structure", "style", "concrete", "concretely", "specific", "specifically",
+    "actionable", "measurable", "realistic", "authentic", "natural",
+    "smooth", "flow", "flows", "readable", "scannable", "bullet", "bullets",
+    "bulletpoint", "sentences", "sentence", "paragraph", "paragraphs",
+    "wording", "worded", "phrased", "language", "tone", "voice", "blank",
+    "redundant", "repetition", "generic", "filler", "boilerplate", "padding",
+    "well", "mention", "mentioned", "mentioning", "described", "explains",
+    "worth", "quite", "very", "solid", "sound", "poorly", "partially",
+}
+
+# Words too common in any feedback to be evidence of a topic.
+_FEEDBACK_STOPWORDS = {
+    "a", "an", "the", "and", "or", "but", "of", "to", "in", "on", "for", "with",
+    "is", "are", "was", "were", "be", "been", "being", "this", "that", "these",
+    "those", "it", "its", "as", "at", "by", "from", "you", "your", "yourself",
+    "i", "me", "my", "we", "our", "they", "them", "their", "he", "she",
+    "have", "has", "had", "do", "does", "did", "so", "such", "there", "here",
+    "then", "than", "very", "just", "only", "like", "what", "which", "who",
+    "how", "why", "when", "where", "into", "over", "under", "about", "after",
+    "before", "during", "through", "between", "each", "both", "other",
+    "work", "works", "worked", "working", "use", "using", "used", "make",
+    "makes", "made", "take", "takes", "give", "gives", "gave", "point",
+    "able", "very", "get", "got", "make", "able", "based", "using",
+}
+
+
+def _content_terms(text: str) -> set[str]:
+    """Distinctive lowercase words used to compare two texts.
+
+    Stopwords and generic feedback vocabulary are excluded, so what remains is
+    the vocabulary of whatever subject the text is actually about. Simple
+    plurals are folded onto their singular form, otherwise a question about
+    "threshold" would not match feedback about "thresholds".
+    """
+    terms: set[str] = set()
+    for raw in re.findall(r"[A-Za-z][A-Za-z0-9+#.-]{2,}", str(text or "")):
+        word = raw.casefold().strip(".-")
+        if len(word) < 4 or word in _FEEDBACK_STOPWORDS:
+            continue
+        if word in _GENERIC_FEEDBACK_TERMS:
+            continue
+        # One canonical form per word, so a plural and its singular count once
+        # and never inflate the drift count.
+        if word.endswith("ss"):
+            pass
+        elif word.endswith("ies") and len(word) > 5:
+            word = word[:-3] + "y"
+        elif word.endswith("es") and len(word) > 6 and word[-3] in "sxzo":
+            word = word[:-2]
+        elif word.endswith("s") and len(word) > 5:
+            word = word[:-1]
+        terms.add(word)
+    return terms
+
+
+def _evaluation_reference_terms(
+    question: str, user_answer: str, target_role: str
+) -> set[str]:
+    """Subject vocabulary the feedback is allowed to be about.
+
+    Built from the exact question and the exact answer the candidate submitted,
+    so relevance is judged against what was actually asked rather than a guess.
+    """
+    return _content_terms(question) | _content_terms(user_answer) | _content_terms(
+        target_role
+    )
+
+
+# How many subject words the feedback may introduce that belong to neither the
+# question, the answer, nor ordinary feedback vocabulary before it is treated as
+# having drifted onto a different topic.
+FEEDBACK_MAX_DRIFT_TERMS = 3
+
+
+def _feedback_drift_terms(feedback: str, reference: set[str]) -> set[str]:
+    """Subject words in the feedback that the question and answer never mention."""
+    return _content_terms(feedback) - reference
+
+
+def _is_feedback_relevant(feedback: str, reference: set[str]) -> bool:
+    """Reject feedback that is about a different subject than the question.
+
+    The model is told the question, but it can still drift onto a neighbouring
+    topic -- a churn-prediction critique for a decision-tree question. Rather
+    than demanding the feedback repeat the question's vocabulary, which would
+    wrongly reject short but correct feedback, this looks for the actual symptom:
+    substantive subject words that appear nowhere in the question, the answer,
+    or the role.
+    """
+    if not reference:
+        return True
+    return len(_feedback_drift_terms(feedback, reference)) <= FEEDBACK_MAX_DRIFT_TERMS
 
 
 def _practice_performance(scores: list[int]) -> str:

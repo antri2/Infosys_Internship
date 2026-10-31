@@ -1,0 +1,32 @@
+[1mdiff --git a/.env.example b/.env.example[m
+[1mindex 69b96b1..7ecae2e 100644[m
+[1m--- a/.env.example[m
+[1m+++ b/.env.example[m
+[36m@@ -9,4 +9,24 @@[m [mSECRET_KEY=change_this_to_a_long_random_string[m
+ # Local LLM model. Qwen is the intended long-term choice.[m
+ # Groq can be used for testing with a valid Groq model.[m
+ GROQ_API_KEY=your_groq_api_key_here[m
+[31m-GROQ_MODEL_NAME=openai/gpt-oss-20b[m
+\ No newline at end of file[m
+[32m+[m[32mGROQ_MODEL_NAME=openai/gpt-oss-20b[m
+[32m+[m
+[32m+[m[32m# --- Adzuna live job source (OPTIONAL) -----------------------------------[m
+[32m+[m[32m# Get a free key at developer.adzuna.com. Leave these empty to keep using the[m
+[32m+[m[32m# bundled 185-job dataset; the app falls back to it automatically whenever[m
+[32m+[m[32m# Adzuna is unconfigured, unreachable, slow, or returns nothing usable.[m
+[32m+[m[32mADZUNA_APP_ID=your_adzuna_app_id[m
+[32m+[m[32mADZUNA_APP_KEY=your_adzuna_app_key[m
+[32m+[m
+[32m+[m[32m# Adzuna country code. "in" is India.[m
+[32m+[m[32mADZUNA_COUNTRY_CODE=in[m
+[32m+[m[32m# Set to false to keep the credentials but ignore Adzuna entirely.[m
+[32m+[m[32mADZUNA_ENABLED=true[m
+[32m+[m[32mADZUNA_TIMEOUT_SECONDS=5[m
+[32m+[m[32mADZUNA_MAX_RESULTS=50[m
+[32m+[m[32m# Default search location and the query used when a user opens Opportunities[m
+[32m+[m[32m# without searching. Personalization still prefers their profile skills.[m
+[32m+[m[32mADZUNA_DEFAULT_LOCATION=India[m
+[32m+[m[32mADZUNA_DEFAULT_QUERY=entry level technology jobs[m
+[32m+[m[32mADZUNA_JOB_CACHE_TTL_SECONDS=900[m
+[32m+[m[32mADZUNA_JOB_CACHE_MAX_ENTRIES=500[m
+\ No newline at end of file[m

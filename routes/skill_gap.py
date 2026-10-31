@@ -7,6 +7,7 @@ from database.db import get_db
 from services import skill_gap_service
 from services.agent_orchestrator import AgentOrchestrator
 from services.context_builder import get_candidate_context, get_job_context
+from services.notification_service import notify_skill_gap
 from services.role_catalog import canonical_role, job_role, role_options
 
 
@@ -151,6 +152,18 @@ def analyze():
             "company": explicit_job["company"],
             "location": explicit_job.get("location"),
         }
+
+    # Only a stored, job-backed report becomes a notification. Role-only and
+    # pasted-JD analyses have no stored report to key on, so they are skipped
+    # rather than notified with an unverifiable dedupe key.
+    if analysis_mode == "job" and explicit_job is not None:
+        notify_skill_gap(
+            db,
+            session["user_id"],
+            int(explicit_job["job_id"]),
+            report,
+            role=target_role or job_role(explicit_job),
+        )
     return jsonify({
         "success": True,
         "target_role": target_role,

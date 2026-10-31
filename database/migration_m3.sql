@@ -140,3 +140,27 @@ CREATE TABLE IF NOT EXISTS chat_context (
     compare_job_ids             JSON,
     FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
+
+-- Notifications for the header bell. Every row is derived from existing
+-- CareerAI data. No field invents a date, deadline, or job detail.
+-- dedupe_key is what prevents the same event being notified twice, so it
+-- carries a UNIQUE constraint on (user_id, dedupe_key).
+-- Notifications for the header bell. Every row is derived from existing
+-- CareerAI data. No field invents a date, deadline, or job detail.
+-- dedupe_key is what prevents the same event being notified twice, so it
+-- carries a UNIQUE constraint on (user_id, dedupe_key).
+CREATE TABLE IF NOT EXISTS notifications (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    user_id         INT NOT NULL,
+    category        ENUM('opportunity', 'skill_gap', 'application') NOT NULL,
+    title           VARCHAR(255) NOT NULL,
+    body            TEXT,
+    link            VARCHAR(500),
+    dedupe_key      VARCHAR(255) NOT NULL,
+    is_read         TINYINT(1) NOT NULL DEFAULT 0,
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    read_at         TIMESTAMP NULL DEFAULT NULL,
+    UNIQUE KEY uniq_user_dedupe (user_id, dedupe_key),
+    INDEX idx_notifications_user (user_id, is_read, created_at),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;

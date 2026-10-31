@@ -1,0 +1,739 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "partials/brand.html" import brand_mark %}
+
+{% block surface_styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
+{% endblock %}
+{% block title %}Review Your Profile - CareerAI{% endblock %}
+{% block body_class %}surface{% endblock %}
+{% block backdrop %}{% include "partials/neural.html" %}{% endblock %}
+{% block content %}
+
+<div class="sc-shell">
+    <header class="sc-nav">
+        <div class="sc-container sc-nav__inner">
+            <a href="{{ url_for('landing') }}" class="sc-brand">
+                {{ brand_mark() }}
+                <span>CareerAI</span>
+            </a>
+            <div class="sc-nav__actions">
+                <a href="{{ url_for('resume.upload') }}" class="sc-btn sc-btn--ghost">Upload another resume</a>
+                <a href="{{ url_for('profile.view') }}" class="sc-btn sc-btn--primary">Full profile</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="sc-review sc-container">
+
+        {# ---------- Intro ---------- #}
+        <div class="sc-review__head">
+            <h1>Review Your Profile</h1>
+            <p>
+                {% if latest_resume and latest_resume.parse_status == 'parsed' %}
+                    These are the details CareerAI extracted from your
+                    {{ latest_resume.file_type | upper }} upload. Check each section
+                    and correct anything that looks wrong &mdash; job matching, your
+                    resume and your cover letters all read from these values.
+                {% else %}
+                    These are the details currently stored on your profile. Check each
+                    section and correct anything that is missing or wrong.
+                {% endif %}
+            </p>
+        </div>
+
+        <div class="sc-review__grid">
+
+            {# ============ a. Personal Information ============ #}
+            <section class="sc-panel" id="panel-personal">
+                <header class="sc-panel__head">
+                    <span class="sc-panel__icon">{{ icon('user') }}</span>
+                    <h2 class="sc-panel__title">Personal Information</h2>
+                    <span class="sc-panel__spacer"></span>
+                    <button type="button" class="sc-btn sc-btn--quiet"
+                            data-edit-toggle="edit-personal">Edit</button>
+                </header>
+
+                <div class="sc-panel__body">
+                    <dl class="sc-kv">
+                        <div>
+                            <dt>Full name</dt>
+                            <dd>{{ user.get('name') or 'Not provided' }}</dd>
+                        </div>
+                        <div>
+                            <dt>Email address</dt>
+                            <dd>{{ user.get('email') or 'Not provided' }}</dd>
+                        </div>
+                        <div>
+                            <dt>Phone number</dt>
+                            <dd>
+                                {%- if user.get('phone') -%}
+                                    {{ user['phone'] }}
+                                {%- else -%}
+                                    <span class="sc-none">Not provided</span>
+                                {%- endif -%}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>Career status</dt>
+                            <dd>{{ user.get('career_status') or 'Not provided' }}</dd>
+                        </div>
+                    </dl>
+                </div>
+
+                {# Email is not editable here: changing it is an account
+                   identity change, and this form owns only the display fields. #}
+                <div class="sc-panel__edit" id="edit-personal" hidden>
+                    <form method="POST" action="{{ url_for('resume.review_save') }}">
+                        <input type="hidden" name="section" value="personal">
+                        <div class="sc-edit-grid">
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="rp-name">Full name</label>
+                                <input type="text" id="rp-name" name="name" maxlength="255"
+                                       value="{{ user.get('name') or '' }}">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="rp-phone">
+                                    Phone number <span style="font-weight:500;color:var(--sc-text-muted)">(optional)</span>
+                                </label>
+                                <input type="tel" id="rp-phone" name="phone" inputmode="numeric"
+                                       maxlength="10" placeholder="10 digits"
+                                       value="{{ user.get('phone') or '' }}">
+                                <p class="sc-field__hint">Exactly 10 digits, or leave blank.</p>
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="rp-status">Career status</label>
+                                <select id="rp-status" name="career_status">
+                                    {% for status in ('Fresher', 'Experienced') %}
+                                    <option value="{{ status }}"
+                                            {% if (user.get('career_status') or 'Fresher') == status %}selected{% endif %}>
+                                        {{ status }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="sc-edit-actions">
+                            <button type="submit" class="sc-btn sc-btn--primary">Save changes</button>
+                            <button type="button" class="sc-btn sc-btn--quiet"
+                                    data-edit-toggle="edit-personal">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            {# ============ b. Professional Summary ============
+               Kept in its own panel, visually distinct from the key/value
+               sections, because it is free prose rather than a stored field
+               pair. #}
+            <section class="sc-panel" id="panel-summary">
+                <header class="sc-panel__head">
+                    <span class="sc-panel__icon">{{ icon('file-text') }}</span>
+                    <h2 class="sc-panel__title">Professional Summary</h2>
+                    <span class="sc-panel__spacer"></span>
+                    <button type="button" class="sc-btn sc-btn--quiet"
+                            data-edit-toggle="edit-summary">Edit</button>
+                </header>
+
+                <div class="sc-panel__body">
+                    {% if profile.get('summary') %}
+                        <p class="sc-summary">{{ profile['summary'] }}</p>
+                    {% else %}
+                        <p class="sc-empty">
+                            {{ icon('inbox') }}
+                            No professional summary was extracted. You can write one here.
+                        </p>
+                    {% endif %}
+                </div>
+
+                <div class="sc-panel__edit" id="edit-summary" hidden>
+                    <form method="POST" action="{{ url_for('resume.review_save') }}">
+                        <input type="hidden" name="section" value="summary">
+                        <div class="sc-field">
+                            <label class="sc-field__label" for="rp-summary">Your summary</label>
+                            <textarea id="rp-summary" name="summary" rows="5"
+                                      maxlength="4000"
+                                      placeholder="A few sentences about what you bring.">{{ profile.get('summary') or '' }}</textarea>
+                            <p class="sc-field__hint">
+                                Written by you and used as-is. Only write what is true.
+                            </p>
+                        </div>
+                        <div class="sc-edit-actions">
+                            <button type="submit" class="sc-btn sc-btn--primary">Save changes</button>
+                            <button type="button" class="sc-btn sc-btn--quiet"
+                                    data-edit-toggle="edit-summary">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            {# ============ c. Education ============ #}
+            <section class="sc-panel sc-panel--wide" id="panel-education">
+                <header class="sc-panel__head">
+                    <span class="sc-panel__icon">{{ icon('graduation-cap') }}</span>
+                    <h2 class="sc-panel__title">Education</h2>
+                    <span class="sc-panel__spacer"></span>
+                    <button type="button" class="sc-btn sc-btn--quiet"
+                            data-edit-toggle="edit-education">Edit</button>
+                </header>
+
+                <div class="sc-panel__body">
+                    {% if education %}
+                        <ul class="sc-records">
+                            {% for row in education %}
+                            <li class="sc-record">
+                                <p class="sc-record__title">
+                                    {{ row.get('institution') or 'Institution not provided' }}
+                                </p>
+                                <p class="sc-record__meta">
+                                    {%- set degree = row.get('degree') -%}
+                                    {%- set field = row.get('field') -%}
+                                    {{- (degree or 'Degree not provided') -}}
+                                    {%- if field %} &middot; {{ field }}{% endif -%}
+                                    &middot;
+                                    {# Graduation year only when the row actually
+                                       holds one; otherwise it says so plainly. #}
+                                    {%- set year = (row.get('end_date') or '') -%}
+                                    {%- if year and '20' in year -%}
+                                        Graduation {{ year[-4:] }}
+                                    {%- else -%}
+                                        Graduation year not provided
+                                    {%- endif -%}
+                                </p>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="sc-empty">
+                            {{ icon('inbox') }} No education details were extracted. Add them so
+                            recommendations can check your qualifications.
+                        </p>
+                    {% endif %}
+                </div>
+
+                <div class="sc-panel__edit" id="edit-education" hidden>
+                    {# Each existing row gets its own form so one save cannot
+                       silently overwrite another row's values. #}
+                    {% for row in education %}
+                    <form method="POST" action="{{ url_for('resume.review_save') }}"
+                          class="sc-edit-form" style="margin-bottom:14px;">
+                        <input type="hidden" name="section" value="education">
+                        <input type="hidden" name="record_id" value="{{ row['id'] }}">
+                        <div class="sc-edit-grid">
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="edu-inst-{{ row['id'] }}">Institution</label>
+                                <input type="text" id="edu-inst-{{ row['id'] }}" name="institution"
+                                       maxlength="255" value="{{ row.get('institution') or '' }}">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="edu-deg-{{ row['id'] }}">Degree / course</label>
+                                <input type="text" id="edu-deg-{{ row['id'] }}" name="degree"
+                                       maxlength="255" value="{{ row.get('degree') or '' }}">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="edu-field-{{ row['id'] }}">Field of study</label>
+                                <input type="text" id="edu-field-{{ row['id'] }}" name="field"
+                                       maxlength="255" value="{{ row.get('field') or '' }}">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="edu-start-{{ row['id'] }}">Start year</label>
+                                <input type="text" id="edu-start-{{ row['id'] }}" name="start_date"
+                                       maxlength="30" placeholder="e.g. 2022"
+                                       value="{{ row.get('start_date') or '' }}">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="edu-end-{{ row['id'] }}">Graduation year</label>
+                                <input type="text" id="edu-end-{{ row['id'] }}" name="end_date"
+                                       maxlength="30" placeholder="e.g. 2026"
+                                       value="{{ row.get('end_date') or '' }}">
+                            </div>
+                        </div>
+                        <div class="sc-edit-actions">
+                            <button type="submit" class="sc-btn sc-btn--primary">Save</button>
+                        </div>
+                    </form>
+                    {% endfor %}
+
+                    {# No record_id, so the endpoint inserts a new row rather
+                       than updating an existing one. #}
+                    <form method="POST" action="{{ url_for('resume.review_save') }}">
+                        <input type="hidden" name="section" value="education">
+                        <p class="sc-field__label" style="margin-top:6px;">Add an education entry</p>
+                        <div class="sc-edit-grid">
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="edu-inst-new">Institution</label>
+                                <input type="text" id="edu-inst-new" name="institution" maxlength="255"
+                                       placeholder="College or university">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="edu-deg-new">Degree / course</label>
+                                <input type="text" id="edu-deg-new" name="degree" maxlength="255"
+                                       placeholder="e.g. B.Tech">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="edu-field-new">Field of study</label>
+                                <input type="text" id="edu-field-new" name="field" maxlength="255"
+                                       placeholder="e.g. Computer Science">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="edu-start-new">Start year</label>
+                                <input type="text" id="edu-start-new" name="start_date" maxlength="30"
+                                       placeholder="e.g. 2022">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="edu-end-new">Graduation year</label>
+                                <input type="text" id="edu-end-new" name="end_date" maxlength="30"
+                                       placeholder="e.g. 2026">
+                            </div>
+                        </div>
+                        <div class="sc-edit-actions">
+                            <button type="submit" class="sc-btn sc-btn--primary">
+                                Add education
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            {# ============ d. Skills ============ #}
+            <section class="sc-panel sc-panel--wide" id="panel-skills">
+                <header class="sc-panel__head">
+                    <span class="sc-panel__icon">{{ icon('zap') }}</span>
+                    <h2 class="sc-panel__title">Skills</h2>
+                    <span class="sc-panel__spacer"></span>
+                    <button type="button" class="sc-btn sc-btn--quiet"
+                            data-edit-toggle="edit-skills">Edit</button>
+                </header>
+
+                <div class="sc-panel__body">
+                    {% if skills %}
+                        <ul class="sc-chips">
+                            {% for skill in skills %}
+                            <li class="sc-chip">{{ skill['name'] }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="sc-empty">
+                            {{ icon('inbox') }} No skills were extracted. Add the ones you actually
+                            have so job matching has something to work with.
+                        </p>
+                    {% endif %}
+                </div>
+
+                <div class="sc-panel__edit" id="edit-skills" hidden>
+                    {# Comma-separated add, matching the profile page's own
+                       control so both behave identically. #}
+                    <form method="POST" action="{{ url_for('resume.review_save') }}">
+                        <input type="hidden" name="section" value="skills">
+                        <input type="hidden" name="skill_id" value="">
+                        <div class="sc-edit-grid">
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="skill-name-new">Skill name</label>
+                                <input type="text" id="skill-name-new" name="name"
+                                       placeholder="e.g. Python">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="skill-cat-new">Category</label>
+                                <select id="skill-cat-new" name="category">
+                                    {% for category in skill_categories %}
+                                    <option value="{{ category }}">{{ category.replace('_', ' ') | title }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="sc-edit-actions">
+                            <button type="submit" class="sc-btn sc-btn--primary">Add skill</button>
+                        </div>
+                    </form>
+
+                    {% if skills %}
+                    <p class="sc-field__label" style="margin-top:20px;">Edit an existing skill</p>
+                    {% for skill in skills %}
+                    <form method="POST" action="{{ url_for('resume.review_save') }}" style="margin-bottom:12px;">
+                        <input type="hidden" name="section" value="skills">
+                        <input type="hidden" name="skill_id" value="{{ skill['id'] }}">
+                        <div class="sc-edit-grid">
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="skill-name-{{ skill['id'] }}">Skill</label>
+                                <input type="text" id="skill-name-{{ skill['id'] }}" name="name"
+                                       value="{{ skill['name'] }}">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="skill-cat-{{ skill['id'] }}">Category</label>
+                                <select id="skill-cat-{{ skill['id'] }}" name="category">
+                                    {% for category in skill_categories %}
+                                    <option value="{{ category }}"
+                                            {% if (skill.get('category') or 'other') == category %}selected{% endif %}>
+                                        {{ category.replace('_', ' ') | title }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="sc-edit-actions">
+                            <button type="submit" class="sc-btn sc-btn--primary">Save</button>
+                        </div>
+                    </form>
+                    {% endfor %}
+                    {% endif %}
+                </div>
+            </section>
+
+            {# ============ e. Work Experience ============ #}
+            <section class="sc-panel sc-panel--wide" id="panel-experience">
+                <header class="sc-panel__head">
+                    <span class="sc-panel__icon">{{ icon('briefcase') }}</span>
+                    <h2 class="sc-panel__title">Work Experience</h2>
+                    <span class="sc-panel__spacer"></span>
+                    <button type="button" class="sc-btn sc-btn--quiet"
+                            data-edit-toggle="edit-experience">Edit</button>
+                </header>
+
+                <div class="sc-panel__body">
+                    {% if experience %}
+                        <ul class="sc-records">
+                            {% for row in experience %}
+                            <li class="sc-record">
+                                <p class="sc-record__title">{{ row.get('title') or 'Role not provided' }}</p>
+                                <p class="sc-record__meta">
+                                    {{ row.get('organization') or 'Organisation not provided' }}
+                                    {%- if row.get('start_date') or row.get('end_date') %}
+                                    &middot; {{ row.get('start_date') or '?' }} &ndash; {{ row.get('end_date') or '?' }}
+                                    {%- endif %}
+                                </p>
+                                {% if row.get('description') %}
+                                <p class="sc-record__desc">{{ row['description'] }}</p>
+                                {% endif %}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="sc-empty">
+                            {{ icon('inbox') }} No work experience was extracted. Internships
+                            count here too &mdash; add one if you have done any.
+                        </p>
+                    {% endif %}
+                </div>
+
+                <div class="sc-panel__edit" id="edit-experience" hidden>
+                    {% for row in experience %}
+                    <form method="POST" action="{{ url_for('resume.review_save') }}" style="margin-bottom:14px;">
+                        <input type="hidden" name="section" value="experience">
+                        <input type="hidden" name="record_id" value="{{ row['id'] }}">
+                        <div class="sc-edit-grid">
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="exp-title-{{ row['id'] }}">Role title</label>
+                                <input type="text" id="exp-title-{{ row['id'] }}" name="title"
+                                       maxlength="255" value="{{ row.get('title') or '' }}">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="exp-org-{{ row['id'] }}">Organisation</label>
+                                <input type="text" id="exp-org-{{ row['id'] }}" name="organization"
+                                       maxlength="255" value="{{ row.get('organization') or '' }}">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="exp-start-{{ row['id'] }}">Start</label>
+                                <input type="text" id="exp-start-{{ row['id'] }}" name="start_date"
+                                       maxlength="30" value="{{ row.get('start_date') or '' }}">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="exp-end-{{ row['id'] }}">End</label>
+                                <input type="text" id="exp-end-{{ row['id'] }}" name="end_date"
+                                       maxlength="30" value="{{ row.get('end_date') or '' }}">
+                            </div>
+                            <div class="sc-field sc-edit-grid--single" style="grid-column:1/-1;">
+                                <label class="sc-field__label" for="exp-desc-{{ row['id'] }}">What you did</label>
+                                <textarea id="exp-desc-{{ row['id'] }}" name="description" rows="4"
+                                          maxlength="4000">{{ row.get('description') or '' }}</textarea>
+                            </div>
+                        </div>
+                        <div class="sc-edit-actions">
+                            <button type="submit" class="sc-btn sc-btn--primary">Save</button>
+                        </div>
+                    </form>
+                    {% endfor %}
+
+                    <form method="POST" action="{{ url_for('resume.review_save') }}">
+                        <input type="hidden" name="section" value="experience">
+                        <p class="sc-field__label" style="margin-top:6px;">Add an experience entry</p>
+                        <div class="sc-edit-grid">
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="exp-title-new">Role title</label>
+                                <input type="text" id="exp-title-new" name="title" maxlength="255"
+                                       placeholder="e.g. Data Analyst Intern">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="exp-org-new">Organisation</label>
+                                <input type="text" id="exp-org-new" name="organization" maxlength="255"
+                                       placeholder="e.g. Infosys">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="exp-start-new">Start</label>
+                                <input type="text" id="exp-start-new" name="start_date" maxlength="30"
+                                       placeholder="e.g. 2025-06">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="exp-end-new">End</label>
+                                <input type="text" id="exp-end-new" name="end_date" maxlength="30"
+                                       placeholder="e.g. 2025-08">
+                            </div>
+                            <div class="sc-field" style="grid-column:1/-1;">
+                                <label class="sc-field__label" for="exp-desc-new">What you did</label>
+                                <textarea id="exp-desc-new" name="description" rows="4"
+                                          maxlength="4000"
+                                          placeholder="One bullet per line."></textarea>
+                            </div>
+                        </div>
+                        <div class="sc-edit-actions">
+                            <button type="submit" class="sc-btn sc-btn--primary">Add experience</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            {# ============ f. Projects ============ #}
+            <section class="sc-panel sc-panel--wide" id="panel-projects">
+                <header class="sc-panel__head">
+                    <span class="sc-panel__icon">{{ icon('layers') }}</span>
+                    <h2 class="sc-panel__title">Projects</h2>
+                    <span class="sc-panel__spacer"></span>
+                    <button type="button" class="sc-btn sc-btn--quiet"
+                            data-edit-toggle="edit-projects">Edit</button>
+                </header>
+
+                <div class="sc-panel__body">
+                    {% if projects %}
+                        <ul class="sc-records">
+                            {% for row in projects %}
+                            <li class="sc-record">
+                                <p class="sc-record__title">{{ row.get('title') or 'Untitled project' }}</p>
+                                {% if row.get('tech_stack') %}
+                                <p class="sc-record__meta">{{ row['tech_stack'] }}</p>
+                                {% endif %}
+                                {% if row.get('description') %}
+                                <p class="sc-record__desc">{{ row['description'] }}</p>
+                                {% endif %}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="sc-empty">
+                            {{ icon('inbox') }} No projects were extracted. Projects are the
+                            strongest evidence you can give a recruiter.
+                        </p>
+                    {% endif %}
+                </div>
+
+                <div class="sc-panel__edit" id="edit-projects" hidden>
+                    {% for row in projects %}
+                    <form method="POST" action="{{ url_for('resume.review_save') }}" style="margin-bottom:14px;">
+                        <input type="hidden" name="section" value="projects">
+                        <input type="hidden" name="record_id" value="{{ row['id'] }}">
+                        <div class="sc-edit-grid">
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="prj-title-{{ row['id'] }}">Project name</label>
+                                <input type="text" id="prj-title-{{ row['id'] }}" name="title"
+                                       maxlength="255" value="{{ row.get('title') or '' }}">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="prj-stack-{{ row['id'] }}">Tech stack</label>
+                                <input type="text" id="prj-stack-{{ row['id'] }}" name="tech_stack"
+                                       maxlength="255" placeholder="e.g. Python, FAISS"
+                                       value="{{ row.get('tech_stack') or '' }}">
+                            </div>
+                            <div class="sc-field" style="grid-column:1/-1;">
+                                <label class="sc-field__label" for="prj-desc-{{ row['id'] }}">Description</label>
+                                <textarea id="prj-desc-{{ row['id'] }}" name="description" rows="4"
+                                          maxlength="4000">{{ row.get('description') or '' }}</textarea>
+                            </div>
+                        </div>
+                        <div class="sc-edit-actions">
+                            <button type="submit" class="sc-btn sc-btn--primary">Save</button>
+                        </div>
+                    </form>
+                    {% endfor %}
+
+                    <form method="POST" action="{{ url_for('resume.review_save') }}">
+                        <input type="hidden" name="section" value="projects">
+                        <p class="sc-field__label" style="margin-top:6px;">Add a project</p>
+                        <div class="sc-edit-grid">
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="prj-title-new">Project name</label>
+                                <input type="text" id="prj-title-new" name="title" maxlength="255"
+                                       placeholder="e.g. Resume Ranker">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="prj-stack-new">Tech stack</label>
+                                <input type="text" id="prj-stack-new" name="tech_stack" maxlength="255"
+                                       placeholder="e.g. Python, FAISS">
+                            </div>
+                            <div class="sc-field" style="grid-column:1/-1;">
+                                <label class="sc-field__label" for="prj-desc-new">Description</label>
+                                <textarea id="prj-desc-new" name="description" rows="4" maxlength="4000"
+                                          placeholder="One bullet per line."></textarea>
+                            </div>
+                        </div>
+                        <div class="sc-edit-actions">
+                            <button type="submit" class="sc-btn sc-btn--primary">Add project</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            {# ============ g. Certifications ============ #}
+            <section class="sc-panel sc-panel--wide" id="panel-certifications">
+                <header class="sc-panel__head">
+                    <span class="sc-panel__icon">{{ icon('award') }}</span>
+                    <h2 class="sc-panel__title">Certifications</h2>
+                    <span class="sc-panel__spacer"></span>
+                    <button type="button" class="sc-btn sc-btn--quiet"
+                            data-edit-toggle="edit-certifications">Edit</button>
+                </header>
+
+                <div class="sc-panel__body">
+                    {% if certifications %}
+                        <ul class="sc-records">
+                            {% for row in certifications %}
+                            <li class="sc-record">
+                                <p class="sc-record__title">{{ row.get('name') or 'Unnamed certification' }}</p>
+                                <p class="sc-record__meta">
+                                    {{ row.get('issuer') or 'Issuer not provided' }}
+                                    {%- if row.get('issue_date') %} &middot; Issued {{ row['issue_date'] }}{% endif -%}
+                                </p>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="sc-empty">
+                            {{ icon('inbox') }} No certifications were extracted.
+                        </p>
+                    {% endif %}
+                </div>
+
+                <div class="sc-panel__edit" id="edit-certifications" hidden>
+                    {% for row in certifications %}
+                    <form method="POST" action="{{ url_for('resume.review_save') }}" style="margin-bottom:14px;">
+                        <input type="hidden" name="section" value="certifications">
+                        <input type="hidden" name="record_id" value="{{ row['id'] }}">
+                        <div class="sc-edit-grid">
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="cert-name-{{ row['id'] }}">Certification</label>
+                                <input type="text" id="cert-name-{{ row['id'] }}" name="name"
+                                       maxlength="255" value="{{ row.get('name') or '' }}">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="cert-issuer-{{ row['id'] }}">Issuer</label>
+                                <input type="text" id="cert-issuer-{{ row['id'] }}" name="issuer"
+                                       maxlength="255" value="{{ row.get('issuer') or '' }}">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="cert-issued-{{ row['id'] }}">Issued</label>
+                                <input type="text" id="cert-issued-{{ row['id'] }}" name="issue_date"
+                                       maxlength="30" value="{{ row.get('issue_date') or '' }}">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="cert-exp-{{ row['id'] }}">Expires</label>
+                                <input type="text" id="cert-exp-{{ row['id'] }}" name="expiry_date"
+                                       maxlength="30" value="{{ row.get('expiry_date') or '' }}">
+                            </div>
+                            <div class="sc-field" style="grid-column:1/-1;">
+                                <label class="sc-field__label" for="cert-url-{{ row['id'] }}">Credential URL</label>
+                                <input type="url" id="cert-url-{{ row['id'] }}" name="credential_url"
+                                       maxlength="500" placeholder="https://"
+                                       value="{{ row.get('credential_url') or '' }}">
+                            </div>
+                        </div>
+                        <div class="sc-edit-actions">
+                            <button type="submit" class="sc-btn sc-btn--primary">Save</button>
+                        </div>
+                    </form>
+                    {% endfor %}
+
+                    <form method="POST" action="{{ url_for('resume.review_save') }}">
+                        <input type="hidden" name="section" value="certifications">
+                        <p class="sc-field__label" style="margin-top:6px;">Add a certification</p>
+                        <div class="sc-edit-grid">
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="cert-name-new">Certification</label>
+                                <input type="text" id="cert-name-new" name="name" maxlength="255"
+                                       placeholder="e.g. AWS Certified Developer">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="cert-issuer-new">Issuer</label>
+                                <input type="text" id="cert-issuer-new" name="issuer" maxlength="255"
+                                       placeholder="e.g. Amazon">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="cert-issued-new">Issued</label>
+                                <input type="text" id="cert-issued-new" name="issue_date" maxlength="30"
+                                       placeholder="e.g. 2025-03">
+                            </div>
+                            <div class="sc-field">
+                                <label class="sc-field__label" for="cert-exp-new">Expires</label>
+                                <input type="text" id="cert-exp-new" name="expiry_date" maxlength="30"
+                                       placeholder="e.g. 2028-03">
+                            </div>
+                            <div class="sc-field" style="grid-column:1/-1;">
+                                <label class="sc-field__label" for="cert-url-new">Credential URL</label>
+                                <input type="url" id="cert-url-new" name="credential_url" maxlength="500"
+                                       placeholder="https://">
+                            </div>
+                        </div>
+                        <div class="sc-edit-actions">
+                            <button type="submit" class="sc-btn sc-btn--primary">Add certification</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+        </div>
+
+        {# ---------- Footer ---------- #}
+        <div class="sc-review__foot">
+            <p>
+                These values feed job matching, skill-gap analysis, your generated
+                resume and your cover letters.
+            </p>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                <a href="{{ url_for('profile.view') }}" class="sc-btn sc-btn--ghost">
+                    Open full profile
+                </a>
+                <a href="{{ url_for('home.dashboard') }}" class="sc-btn sc-btn--primary">
+                    Continue to dashboard {{ icon('arrow-right') }}
+                </a>
+            </div>
+        </div>
+    </main>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* Per-section Edit toggle. Each panel header button reveals exactly one edit
+   region, so several sections can be open at once without any of them
+   collapsing the others. */
+(function () {
+    "use strict";
+    document.querySelectorAll("[data-edit-toggle]").forEach(function (button) {
+        button.addEventListener("click", function () {
+            var region = document.getElementById(button.getAttribute("data-edit-toggle"));
+            if (!region) return;
+            region.hidden = !region.hidden;
+
+            // Cancel buttons should read "Cancel"; header buttons "Edit".
+            var header = button.closest(".sc-panel__head");
+            if (!header) return;
+            if (region.hidden) {
+                button.textContent = "Edit";
+                button.setAttribute("aria-expanded", "false");
+            } else {
+                button.textContent = "Hide";
+                button.setAttribute("aria-expanded", "true");
+                var first = region.querySelector("input, textarea, select");
+                if (first) first.focus({ preventScroll: false });
+            }
+        });
+    });
+})();
+</script>
+{% endblock %}

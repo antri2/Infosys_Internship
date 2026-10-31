@@ -1233,7 +1233,7 @@ def create_session(db, user_id: int, context: dict | None = None) -> int:
     summary = json.dumps(context or {}, ensure_ascii=False, default=str)
     with db.cursor() as cursor:
         cursor.execute(
-            "INSERT INTO chat_sessions (user_id, summary) VALUES (%s, %s)",
+            "INSERT INTO chat_sessions (user_id, title, summary) VALUES (%s, NULL, %s)",
             (user_id, summary),
         )
         session_id = cursor.lastrowid
@@ -1243,6 +1243,117 @@ def create_session(db, user_id: int, context: dict | None = None) -> int:
         )
     db.commit()
     return session_id
+
+
+# A conversation with no explicit title gets one derived from the first
+# question, so the sidebar is never a column of "New chat" rows.
+_MAX_TITLE_LENGTH = 80
+
+
+def _derive_title(text: str) -> str | None:
+    """Build a short sidebar title from the first thing the user asked."""
+    cleaned = " ".join(str(text or "").split())
+    if not cleaned:
+        return None
+    # Stop at the first sentence so the title stays scannable.
+    cleaned = re.split(r"(?<=[.!?])\s", cleaned)[0].strip()
+    if len(cleaned) > _MAX_TITLE_LENGTH:
+        cleaned = cleaned[:_MAX_TITLE_LENGTH].rsplit(" ", 1)[0].rstrip(" ,;:.") + "..."
+    return cleaned or None
+
+
+def list_conversations(db, user_id: int, limit: int = 50) -> list[dict]:
+    """Every conversation belonging to this user, most recently active first.
+
+    The title falls back to the opening question so conversations saved before
+    the title column existed still read sensibly in the sidebar.
+    """
+    with db.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT cs.id,
+                   cs.title,
+                   cs.created_at,
+                   cs.updated_at,
+                   (SELECT COUNT(*) FROM chat_messages m WHERE m.session_id = cs.id) AS message_count,
+                   (SELECT m.content FROM chat_messages m
+                     WHERE m.session_id = cs.id AND m.role = 'user'
+                     ORDER BY m.id LIMIT 1) AS first_question
+            FROM chat_sessions cs
+            WHERE cs.user_id = %s
+            ORDER BY cs.updated_at DESC, cs.id DESC
+            LIMIT %s
+            """,
+            (user_id, max(1, int(limit))),
+        )
+        rows = cursor.fetchall()
+
+    for row in rows:
+        row["title"] = (
+            str(row["title"]).strip()
+            if row.get("title")
+            else (_derive_title(row.get("first_question")) or "New chat")
+        )
+        row["preview"] = _shorten(row.get("first_question"), 90)
+        row.pop("first_question", None)
+    return rows
+
+
+def rename_session(db, user_id: int, session_id: int, title: str) -> bool:
+    """Set a conversation title. Ownership is enforced in the WHERE clause."""
+    cleaned = " ".join(str(title or "").split())[:_MAX_TITLE_LENGTH] or "New chat"
+    with db.cursor() as cursor:
+        cursor.execute(
+            "UPDATE chat_sessions SET title = %s, updated_at = CURRENT_TIMESTAMP "
+            "WHERE id = %s AND user_id = %s",
+            (cleaned, session_id, user_id),
+        )
+        changed = cursor.rowcount
+    db.commit()
+    return changed > 0
+
+
+def delete_session(db, user_id: int, session_id: int) -> bool:
+    """Delete one conversation and, by cascade, its messages and context."""
+    with db.cursor() as cursor:
+        cursor.execute(
+            "DELETE FROM chat_sessions WHERE id = %s AND user_id = %s",
+            (session_id, user_id),
+        )
+        changed = cursor.rowcount
+    db.commit()
+    return changed > 0
+
+
+def ensure_session_title(db, user_id: int, session_id: int, question: str) -> None:
+    """Name a conversation after its first question, once."""
+    if not question:
+        return
+    with db.cursor() as cursor:
+        cursor.execute(
+            "SELECT title FROM chat_sessions WHERE id = %s AND user_id = %s",
+            (session_id, user_id),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return
+        if str(row.get("title") or "").strip():
+            return
+        title = _derive_title(question)
+        if not title:
+            return
+        cursor.execute(
+            "UPDATE chat_sessions SET title = %s WHERE id = %s AND user_id = %s",
+            (title, session_id, user_id),
+        )
+    db.commit()
+
+
+def _shorten(value, limit: int) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) <= limit:
+        return text
+    return text[:limit].rsplit(" ", 1)[0].rstrip(" ,;:.") + "..."
 
 
 def get_session(db, user_id: int, session_id: int) -> dict | None:

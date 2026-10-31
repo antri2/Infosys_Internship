@@ -1,228 +1,355 @@
 {% extends "app_shell.html" %}
 {% from "_icons.html" import icon %}
-{% block title %}Home - CareerAI{% endblock %}
-{% block app_content %}
 
 {# Dashboard presentation only.
 
-   Every class is namespaced "db-" and defined in the Dashboard-only block at
-   the end of static/css/style.css, so no shared rule is altered and no other
-   page changes. All values come from the unchanged home.dashboard route:
-   user_name, is_new_user, resume_uploaded, top_jobs, applications_count,
-   completeness. No value is hardcoded and no route is invented. #}
+   Every value below comes from the unchanged home.dashboard route: user_name,
+   is_new_user, resume_uploaded, top_jobs, applications_count, completeness.
+   Nothing is hardcoded per user and no route is invented. Styling lives in
+   static/css/app.css under the ai-*/stat-card/tool-card/job-card classes. #}
+{% block title %}Home - CareerAI{% endblock %}
+{% block app_content %}
 
-<!-- ========================= 1. Welcome hero ========================= -->
-<section class="db-hero">
-    <span class="db-hero-shape db-hero-shape-a" aria-hidden="true"></span>
-    <span class="db-hero-shape db-hero-shape-b" aria-hidden="true"></span>
-    <span class="db-hero-shape db-hero-shape-c" aria-hidden="true"></span>
-    <span class="db-hero-ring" aria-hidden="true"></span>
+<!-- ============================ 1. Welcome ============================ -->
+{# user_name is rendered directly from the session, so the greeting always
+   shows whoever is actually signed in. #}
+<section class="hero-panel">
+    {# Two layered surfaces on one navy gradient: the greeting sits directly on
+       the panel, the aside is a translucent card. This keeps the section
+       balanced instead of a single oversized solid-blue block. #}
+    <div class="hero-panel__main">
+        <p class="hero-panel__eyebrow">Your career workspace</p>
+        <p class="hero-panel__greeting">{{ 'Welcome,' if is_new_user else 'Welcome back,' }}</p>
+        <h1 class="hero-panel__name">{{ user_name }}</h1>
+        <p class="hero-panel__sub">
+            Your career journey matters. Let's find the right opportunities and help you grow.
+        </p>
+    </div>
 
-    <div class="db-hero-body">
-        <p class="db-hero-greeting">{{ 'Welcome,' if is_new_user else 'Welcome back,' }}</p>
-        <h1 class="db-hero-name">{{ user_name }}</h1>
-        <p class="db-hero-sub">Your career journey matters. Let's find the right opportunities and help you grow.</p>
-        <p class="db-hero-quote">"Small steps every day lead to big career goals."</p>
+    <div class="hero-panel__aside">
+        <p class="hero-panel__quote">"Small steps every day lead to big career goals."</p>
     </div>
 </section>
 
 {% if not resume_uploaded %}
-<div class="notice-card">
-    <div>
-        <p class="notice-title">Upload your resume to unlock personalized matches</p>
-        <p class="notice-sub">We'll extract your skills and experience automatically — takes less than a minute.</p>
+<div class="ai-card ai-card--blue" style="display:flex;align-items:center;gap:18px;margin-bottom:24px;">
+    <div style="flex:1;">
+        <h2 class="ai-card__title">Upload your resume to unlock personalized matches</h2>
+        <p style="margin:6px 0 0;font-size:var(--ai-t-sm);line-height:1.6;color:var(--ai-ink-soft);">
+            We'll extract your skills and experience automatically — takes less than a minute.
+        </p>
     </div>
-    <a href="{{ url_for('resume.upload') }}" class="btn btn-primary" style="flex-shrink:0">Upload Resume</a>
+    <a href="{{ url_for('resume.upload') }}" class="ai-btn ai-btn--primary">Upload Resume</a>
 </div>
 {% endif %}
 
-<!-- ====================== 2. Three summary cards ====================== -->
-{# Only these three keep the small ">" indicator. #}
-<section class="db-stats" aria-label="Dashboard summary">
+<!-- ====================== 2. Dashboard summary ====================== -->
+{# Calculations are unchanged: the route still passes applications_count and
+   completeness straight through. Only the presentation differs. #}
+<section class="ai-grid ai-grid--3" aria-label="Dashboard summary" style="margin-bottom:26px;">
 
-    <a class="db-stat db-stat-blue" href="{{ url_for('opportunities.list_view') }}">
-        <span class="db-stat-icon">{{ icon('briefcase') }}</span>
-        <span class="db-stat-body">
-            <span class="db-stat-label">Recommended Opportunities</span>
-            <span class="db-stat-value">{{ top_jobs | length }}</span>
+    {# One palette across all three, so the row reads as a single system.
+       The values, the calculations and the destinations are unchanged. #}
+    <a class="stat-card stat-card--light" href="{{ url_for('opportunities.list_view') }}">
+        <span class="stat-card__icon">{{ icon('briefcase') }}</span>
+        <span class="stat-card__body">
+            <span class="stat-card__label">Recommended Opportunities</span>
+            <span class="stat-card__value">{{ top_jobs | length }}</span>
+            <span class="stat-card__meta">Matched to your profile</span>
         </span>
-        <span class="db-stat-go" aria-hidden="true">&gt;</span>
     </a>
 
-    <a class="db-stat db-stat-lavender" href="{{ url_for('applications.list_view') }}">
-        <span class="db-stat-icon">{{ icon('file-text') }}</span>
-        <span class="db-stat-body">
-            <span class="db-stat-label">Applications</span>
-            <span class="db-stat-value">{{ applications_count }}</span>
+    <a class="stat-card stat-card--light" href="{{ url_for('applications.list_view') }}">
+        <span class="stat-card__icon">{{ icon('file-text') }}</span>
+        <span class="stat-card__body">
+            <span class="stat-card__label">Applications</span>
+            <span class="stat-card__value">{{ applications_count }}</span>
+            <span class="stat-card__meta">Saved and applied roles</span>
         </span>
-        <span class="db-stat-go" aria-hidden="true">&gt;</span>
     </a>
 
-    <a class="db-stat db-stat-purple" href="{{ url_for('profile.view') }}">
-        <span class="db-stat-icon">{{ icon('star') }}</span>
-        <span class="db-stat-body">
-            <span class="db-stat-label">Profile Completeness</span>
-            <span class="db-stat-value">{{ completeness }}%</span>
+    <a class="stat-card stat-card--light" href="{{ url_for('profile.view') }}">
+        <span class="stat-card__icon">{{ icon('star') }}</span>
+        <span class="stat-card__body">
+            <span class="stat-card__label">Profile Completeness</span>
+            <span class="stat-card__value">{{ completeness }}%</span>
+            <span class="stat-card__bar" aria-hidden="true">
+                <span class="stat-card__fill" style="width:{{ completeness }}%"></span>
+            </span>
+            <span class="stat-card__meta">
+                {% if completeness >= 100 %}Your profile is complete
+                {% else %}Finish your profile for better matches{% endif %}
+            </span>
         </span>
-        <span class="db-stat-go" aria-hidden="true">&gt;</span>
     </a>
 
 </section>
 
 <!-- ========================= 3. Career Tools ========================= -->
-{# No arrows on these four; the hover state signals they are clickable. #}
-<section class="db-section">
-    <div class="db-section-head">
-        <div>
-            <h2>Career Tools</h2>
-            <p>Everything you need to prepare, apply, and stand out.</p>
-        </div>
-    </div>
+<section class="ai-grid ai-grid--4" style="margin-bottom:30px;">
+    <a class="tool-card" href="{{ url_for('interview.view') }}">
+        <span class="tool-card__icon">{{ icon('mic') }}</span>
+        <h3>Interview Preparation</h3>
+        <p>Practise role-specific questions and mock interviews.</p>
+        <span class="tool-card__go">Open {{ icon('arrow-right') }}</span>
+    </a>
 
-    <div class="db-tools">
-        <a class="db-tool db-tool-blue" href="{{ url_for('interview.view') }}">
-            <span class="db-tool-icon">{{ icon('mic') }}</span>
-            <span class="db-tool-title">Interview Prep</span>
-            <span class="db-tool-desc">Practise role-specific questions and mock interviews.</span>
-        </a>
+    <a class="tool-card" href="{{ url_for('resume_builder.view') }}">
+        <span class="tool-card__icon">{{ icon('file-text') }}</span>
+        <h3>Resume Builder</h3>
+        <p>Build an ATS-friendly resume tailored to a target role.</p>
+        <span class="tool-card__go">Open {{ icon('arrow-right') }}</span>
+    </a>
 
-        <a class="db-tool db-tool-lavender" href="{{ url_for('resume_builder.view') }}">
-            <span class="db-tool-icon">{{ icon('file-text') }}</span>
-            <span class="db-tool-title">Resume Builder</span>
-            <span class="db-tool-desc">Build an ATS-friendly resume tailored to a target role.</span>
-        </a>
+    <a class="tool-card" href="{{ url_for('cover_letter.view') }}">
+        <span class="tool-card__icon">{{ icon('mail') }}</span>
+        <h3>Cover Letter</h3>
+        <p>Generate a targeted letter from your verified profile.</p>
+        <span class="tool-card__go">Open {{ icon('arrow-right') }}</span>
+    </a>
 
-        <a class="db-tool db-tool-purple" href="{{ url_for('cover_letter.view') }}">
-            <span class="db-tool-icon">{{ icon('mail') }}</span>
-            <span class="db-tool-title">Cover Letter</span>
-            <span class="db-tool-desc">Generate a targeted letter from your verified profile.</span>
-        </a>
-
-        <a class="db-tool db-tool-slate" href="{{ url_for('skill_gap.view') }}">
-            <span class="db-tool-icon">{{ icon('search') }}</span>
-            <span class="db-tool-title">Skill Gap</span>
-            <span class="db-tool-desc">See exactly which skills to learn next for a role.</span>
-        </a>
-    </div>
+    <a class="tool-card" href="{{ url_for('skill_gap.view') }}">
+        <span class="tool-card__icon">{{ icon('trending-up') }}</span>
+        <h3>Skill Gap</h3>
+        <p>See which skills a role needs that you do not have yet.</p>
+        <span class="tool-card__go">Open {{ icon('arrow-right') }}</span>
+    </a>
 </section>
 
-<!-- ====================== 4. Recommended for You ====================== -->
-<section class="db-section db-section-last">
-    <div class="db-section-head">
-        <div>
-            <h2>Recommended for You</h2>
-            <p>Opportunities based on your profile and skills</p>
-        </div>
-        <a class="db-section-link" href="{{ url_for('opportunities.list_view') }}">
-            View All {{ icon('arrow-right', 'icon-sm') }}
-        </a>
+<!-- ======================= 4. Recommended Jobs ======================= -->
+<section aria-labelledby="recommended-jobs-heading">
+    <div style="margin-bottom:16px;">
+        <h2 id="recommended-jobs-heading" style="margin:0;font-size:var(--ai-t-xl);font-weight:700;letter-spacing:-.018em;color:var(--ai-ink);">
+            Recommended Jobs
+        </h2>
+        <p style="margin:6px 0 0;font-size:var(--ai-t-sm);color:var(--ai-ink-soft);">
+            Ranked against the skills in your profile. Select View Details for the full posting.
+        </p>
     </div>
 
-    {% if completeness < 70 %}
-    <p class="db-note">
-        Your profile is {{ completeness }}% complete — these matches will get more accurate as you fill in more details.
-        <a href="{{ url_for('profile.view') }}">Complete your profile</a>
-    </p>
-    {% endif %}
-
     {% if top_jobs %}
-    {# Exactly eight of the existing ranked results. top_jobs arrives from the
-       unchanged home.dashboard route; slicing here is presentation only. #}
-    <div class="db-recs">
-        {% for job in top_jobs[:8] %}
-        <article class="db-rec" aria-labelledby="db-rec-title-{{ job.job_id }}">
-            <div class="db-rec-top">
-                <span class="db-rec-logo">{{ (job.company or '?')[0] | upper }}</span>
+    {# Six cards first, in a 3-column grid; "View More" reveals the rest.
+       The data is already in the page, so this is a client-side reveal and
+       costs no request. Equal heights come from the CSS (title line clamp, a
+       fixed-height skills area, and a footer pinned to the bottom). #}
+    <div class="job-grid" id="jobGrid">
+        {% for job in top_jobs %}
+        <article class="job-card{{ ' job-card--extra' if loop.index0 >= home_visible_count else '' }}"
+                 data-job-card
+                 {% if loop.index0 >= home_visible_count %}hidden{% endif %}>
+
+            <div class="job-card__head">
+                <div class="job-card__id">
+                    <p class="job-card__company">
+                        {{ job.company or 'Company not listed' }}
+                        {% if job.is_demo %}<span class="job-card__demo" title="This listing is generated sample data, not a live employer posting.">{{ job.demo_label }}</span>{% endif %}
+                    </p>
+                    {% if job.location %}
+                    <p class="job-card__loc">{{ icon('map-pin') }} {{ job.location }}</p>
+                    {% endif %}
+                </div>
                 {% if job.match_available %}
-                <span class="db-rec-fit {{ 'mid' if job.match_percent < 70 else '' }} {{ 'low' if job.match_percent < 40 else '' }}"
+                <span class="fit-badge {{ 'fit-badge--mid' if job.match_percent < 70 else '' }} {{ 'fit-badge--low' if job.match_percent < 40 else '' }}"
                       title="Profile Skill Fit based on required and preferred skills; not a probability of getting the job.">
-                    {{ job.match_percent }}%
+                    {{ job.match_percent }}%<small>Skill Fit</small>
                 </span>
                 {% endif %}
             </div>
 
-            <h3 class="db-rec-title" id="db-rec-title-{{ job.job_id }}">{{ job.title }}</h3>
-            <p class="db-rec-company">{{ job.company }}</p>
+            <h3 class="job-card__title" title="{{ job.title }}">{{ job.title or 'Untitled role' }}</h3>
 
-            <ul class="db-rec-meta">
-                {% if job.location %}<li>{{ icon('map-pin', 'icon-sm') }} {{ job.location }}</li>{% endif %}
-                {% if job.job_type %}<li>{{ job.job_type }}</li>{% endif %}
-                {% if job.stipend_or_salary %}<li>{{ job.stipend_or_salary }}</li>{% endif %}
+            {# Optional facts, rendered only when the source actually carries
+               them. Nothing here falls back to a placeholder string.
+
+               The list is a bounded set rather than an open one: the grid
+               equalises cards within a row, but not between rows, so an
+               unbounded list would still let one listing render 40px taller
+               than another. Work mode lives in the dialog instead, which brings
+               the worst case to four rows and the height in .job-card__facts to
+               a constant. Rows are added from the top, so a listing that
+               publishes a salary keeps it. #}
+            <ul class="job-card__facts">
+                {% if job.job_type %}<li>{{ icon('briefcase', 'icon-xs') }}{{ job.job_type }}</li>{% endif %}
+                {% if job.stipend_or_salary %}<li>{{ icon('dollar-sign', 'icon-xs') }}{{ job.stipend_or_salary }}</li>{% endif %}
+                {# Only a validated real publication date ever reaches this
+                   line; a generated listing shows no date at all. #}
+                {% if job.published_date %}<li>{{ icon('clock', 'icon-xs') }}Posted {{ job.published_date }}</li>{% endif %}
+                <li class="job-card__apply-by{{ ' job-card__apply-by--suggested' if job.apply_by.suggested }}">
+                    {{ icon('clock', 'icon-xs') }}{{ job.apply_by.label }}: {{ job.apply_by.value }}
+                </li>
             </ul>
 
-            {# One panel per job, keyed by its own job_id, so each button opens
-               only its own job. Same pattern the Opportunities page already uses
-               for its inline "View Details", built from fields the route already
-               supplies -- no new route and no new data source. #}
-            <button type="button" class="db-rec-btn"
-                    aria-expanded="false" aria-controls="db-rec-detail-{{ job.job_id }}"
-                    onclick="toggleDbRec('db-rec-detail-{{ job.job_id }}', this)">
-                View Details
-            </button>
-
-            <div class="db-rec-detail" id="db-rec-detail-{{ job.job_id }}">
-                {% if job.description %}
-                <h4>Description</h4>
-                <p>{{ job.description }}</p>
-                {% endif %}
-
-                {% if job.responsibilities %}
-                <h4>Responsibilities</h4>
-                <p class="db-rec-lines">{{ job.responsibilities | replace('|', '\n') }}</p>
-                {% endif %}
-
-                {% if job.qualifications or job.experience_required %}
-                <h4>Qualifications</h4>
-                <p>
-                    {% if job.qualifications %}{{ job.qualifications }}{% endif %}
-                    {% if job.experience_required %} &middot; Experience: {{ job.experience_required }}{% endif %}
-                </p>
-                {% endif %}
-
+            <div class="job-card__skills">
+                <span class="job-card__skills-label">Required skills</span>
                 {% if job.required_skills %}
-                <h4>Required skills</h4>
-                <ul class="db-rec-skilllist">
-                    {% for s in job.required_skills.split(',') if s.strip() %}
-                    <li class="{{ 'have' if s.strip() in job.matched_skills else 'missing' }}">{{ s.strip() }}</li>
+                <div class="ai-pill-row">
+                    {# A fixed number keeps every card the same height; the
+                       remainder is summarised rather than dropped silently. #}
+                    {% set listed = job.required_skills.split(',') | map('trim') | select | list %}
+                    {% for skill in listed[:4] %}
+                    <span class="ai-pill ai-pill--{{ 'have' if skill in job.matched_skills else 'required' }}">{{ skill }}</span>
                     {% endfor %}
-                </ul>
-                {% endif %}
-
-                {% if job.preferred_skills %}
-                <h4>Preferred skills</h4>
-                <ul class="db-rec-skilllist">
-                    {% for s in job.preferred_skills.split(',') if s.strip() %}
-                    <li class="{{ 'have' if s.strip() in job.matched_preferred else 'missing' }}">{{ s.strip() }}</li>
-                    {% endfor %}
-                </ul>
-                {% endif %}
-
-                <div class="db-rec-detail-actions">
-                    <a class="db-rec-chip" href="{{ url_for('skill_gap.view', job_id=job.job_id, target_role=job.title) }}">Skill Gap</a>
-                    <a class="db-rec-chip" href="{{ url_for('interview.view', job_id=job.job_id, target_role=job.title, target_source='custom') }}">Prepare for Interview</a>
-                    {% if job.apply_link %}
-                    <a class="db-rec-chip" href="{{ job.apply_link }}" target="_blank" rel="noopener noreferrer">Apply</a>
+                    {% if listed | length > 4 %}
+                    <span class="ai-pill ai-pill--more" title="{{ listed | join(', ') }}">+{{ listed | length - 4 }} more</span>
                     {% endif %}
                 </div>
+                {% else %}
+                {# No skills published: say so in words, not as a placeholder
+                   value pretending to be one. #}
+                <p class="job-card__empty-note">This posting does not list required skills.</p>
+                {% endif %}
+            </div>
+
+            <div class="job-card__actions">
+                {# data-* carries the whole posting into the shared dialog, so
+                   opening a job needs no request and no extra markup. #}
+                <button type="button" class="ai-btn ai-btn--job-details"
+                        data-job-open
+                        data-job-id="{{ job.job_id }}"
+                        data-title="{{ job.title or '' }}"
+                        data-company="{{ job.company or '' }}"
+                        data-location="{{ job.location or '' }}"
+                        data-job-type="{{ job.job_type or '' }}"
+                        data-salary="{{ job.stipend_or_salary or '' }}"
+                        data-deadline="{{ job.application_deadline or '' }}"
+                        data-experience="{{ job.experience_required or '' }}"
+                        data-work-mode="{{ job.work_mode or '' }}"
+                        data-fit="{{ job.match_percent if job.match_available else '' }}"
+                        data-description="{{ job.description or '' }}"
+                        data-responsibilities="{{ job.responsibilities or '' }}"
+                        data-qualifications="{{ job.qualifications or '' }}"
+                        data-required-skills="{{ job.required_skills or '' }}"
+                        data-matched-skills="{{ job.matched_skills | join(', ') }}"
+                        data-missing-skills="{{ job.missing_skills | join(', ') }}">
+                    View Details
+                </button>
+
+                {# Same existing /applications/<id>/<action> endpoints the
+                   Opportunities page posts to, so tracking is unchanged. #}
+                <button type="button" class="ai-btn ai-btn--job-action" data-track-job="{{ job.job_id }}"
+                        data-track-action="save">
+                    {{ 'Saved ✓' if job.application_status == 'saved' else 'Save' }}
+                </button>
+                <button type="button" class="ai-btn ai-btn--job-action" data-track-job="{{ job.job_id }}"
+                        data-track-action="apply">
+                    {{ 'Applied ✓' if job.application_status in ('applied', 'interview', 'under_review') else 'Apply' }}
+                </button>
             </div>
         </article>
         {% endfor %}
     </div>
+
+    {# Only rendered when there is genuinely more to show. #}
+    {% if top_jobs | length > home_visible_count %}
+    <div class="job-grid-more">
+        <button type="button" class="ai-btn ai-btn--ghost" id="viewMoreJobs"
+                aria-expanded="false" aria-controls="jobGrid">
+            View More <span class="job-grid-more__count">({{ top_jobs | length - home_visible_count }} more)</span>
+        </button>
+        <button type="button" class="ai-btn ai-btn--quiet" id="viewLessJobs" hidden>Show fewer</button>
+    </div>
+    {% endif %}
+
     {% else %}
-    <p class="muted">Complete your profile to see personalized recommendations.</p>
+    <div class="ai-card ai-card--alt">
+        <p style="margin:0;color:var(--ai-ink-soft);">Complete your profile to see personalized recommendations.</p>
+    </div>
     {% endif %}
 </section>
 
-<script>
-/* Dashboard-only. Mirrors the Opportunities page's toggleDetail(), but scoped
-   to these eight cards and keyed by each card's own job id. */
-function toggleDbRec(panelId, button) {
-    var panel = document.getElementById(panelId);
-    if (!panel) { return; }
-    var open = panel.classList.toggle('open');
-    button.textContent = open ? 'Hide Details' : 'View Details';
-    button.setAttribute('aria-expanded', open ? 'true' : 'false');
-}
-</script>
+{# Actions shown inside the dialog. Kept identical to the card's own actions so
+   a job can be saved or applied without scrolling back. #}
+{% set job_modal_actions %}
+    <a class="ai-btn ai-btn--quiet" href="{{ url_for('opportunities.list_view') }}">See all opportunities</a>
+{% endset %}
+{% include "partials/job_modal.html" %}
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* View More: reveals the remaining ranked jobs in place. All of the data is
+   already rendered, so this only toggles the hidden flag -- no request, and the
+   page height grows by exactly the cards it reveals. */
+(function () {
+    const viewMore = document.getElementById('viewMoreJobs');
+    const viewLess = document.getElementById('viewLessJobs');
+    const grid = document.getElementById('jobGrid');
+    if (!viewMore || !grid) return;
+
+    const extraCards = [].slice.call(grid.querySelectorAll('.job-card--extra'));
+    if (!extraCards.length) return;
+
+    const setState = expanded => {
+        extraCards.forEach(card => { card.hidden = !expanded; });
+        viewMore.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        viewMore.hidden = expanded;
+        if (viewLess) viewLess.hidden = !expanded;
+    };
+
+    viewMore.addEventListener('click', () => {
+        setState(true);
+        // Move focus to the first revealed card's View Details so keyboard
+        // users land on the content they just asked for.
+        const first = extraCards[0].querySelector('[data-job-open]');
+        if (first) first.focus();
+    });
+    if (viewLess) viewLess.addEventListener('click', () => setState(false));
+}());
+
+/* Save / Apply on a Home card. Posts to the same existing endpoints the
+   Opportunities page uses, so application tracking is untouched. */
+document.addEventListener('click', async event => {
+    const button = event.target.closest('[data-track-job]');
+    if (!button || button.disabled) return;
+
+    const jobId = button.dataset.trackJob;
+    const action = button.dataset.trackAction;
+    const original = button.textContent.trim();
+
+    button.disabled = true;
+    button.textContent = action === 'save' ? 'Saving…' : 'Applying…';
+
+    try {
+        const response = await fetch(`/applications/${jobId}/${action}`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' }
+        });
+        const text = await response.text();
+        let data = {};
+        if (text) { try { data = JSON.parse(text); } catch (_) { data = {}; } }
+        if (!response.ok) throw new Error(data.error || 'That action could not be completed.');
+
+        // Reflect the stored status, using the same wording as Opportunities.
+        const card = button.closest('.job-card');
+        const saveBtn = card ? card.querySelector('[data-track-action="save"]') : null;
+        const applyBtn = card ? card.querySelector('[data-track-action="apply"]') : null;
+        if (saveBtn) saveBtn.textContent = data.status === 'saved' ? 'Saved ✓' : 'Save';
+        if (applyBtn) {
+            applyBtn.textContent = ['applied', 'interview', 'under_review'].includes(data.status)
+                ? 'Applied ✓'
+                : (data.status === 'rejected' ? 'Rejected' : 'Apply');
+        }
+        // Previously the server's message replaced the button label, which
+        // left the button reading a sentence instead of a command. The label
+        // now keeps tracking the status, and the message is shown as a toast.
+        if (data.message) {
+            window.showToast(
+                data.message,
+                data.status === 'rejected' ? 'error' : 'success'
+            );
+        }
+    } catch (error) {
+        button.textContent = original;
+        window.showToast(
+            error.message || 'Something went wrong. Please try again.',
+            'error'
+        );
+    } finally {
+        button.disabled = false;
+    }
+});
+</script>
+<script src="{{ url_for('static', filename='js/job_modal.js') }}"></script>
 {% endblock %}

@@ -1,0 +1,32 @@
+{# Job details dialog, shared by the Home dashboard and the Opportunities page.
+
+   Rendered empty: the page fills it from the data-* attributes on the card's
+   "View Details" button, so the content always comes from the job row the page
+   already rendered. Nothing here invents a field the source does not have --
+   static/js/job_modal.js prints "Not provided" for an absent one.
+
+   The close button, the backdrop and Escape all dismiss it. The page supplies
+   `job_modal_actions` because Home and Opportunities expose different controls;
+   it lives in a <template> rather than a data-* attribute because the markup
+   contains double quotes that would terminate the attribute value. #}
+<div class="ai-modal" id="aiJobModal" role="dialog" aria-modal="true"
+     aria-labelledby="aiJobModalTitle" hidden>
+    <div class="ai-modal__backdrop" data-close-job-modal></div>
+    <div class="ai-modal__panel" role="document">
+        <header class="ai-modal__head">
+            <span class="ai-modal__badge" aria-hidden="true">?</span>
+            <div style="min-width:0;">
+                <h2 class="ai-modal__title" id="aiJobModalTitle">Job details</h2>
+                <p class="ai-modal__sub"></p>
+            </div>
+            <button type="button" class="ai-modal__close" id="aiJobModalClose"
+                    aria-label="Close job details">
+                {{ icon('x') }}
+            </button>
+        </header>
+        <div class="ai-modal__body"></div>
+        <footer class="ai-modal__actions"></footer>
+    </div>
+
+    <template id="aiJobModalActions">{{ job_modal_actions }}</template>
+</div>

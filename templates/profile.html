@@ -4,9 +4,11 @@
 {% block app_content %}
 
 {% macro section_head(title, count) %}
-<div class="dash-card-head">
-    <h3>{{ title }}</h3>
-    <span class="muted">{{ count }} saved</span>
+{# Header for every profile section. Same component across all of them so the
+   spacing and type scale cannot drift between sections. #}
+<div class="ai-card__head">
+    <h2 class="ai-card__title">{{ title }}</h2>
+    {% if count != '' %}<span class="ai-card__count">{{ count }} saved</span>{% endif %}
 </div>
 {% endmacro %}
 
@@ -102,15 +104,15 @@
 </form>
 {% endmacro %}
 
-<div class="profile-header">
-    <span class="profile-avatar-lg">{{ (user.name or 'U')[0] | upper }}</span>
-    <div>
+<div class="profile-banner">
+    <span class="profile-banner__avatar" aria-hidden="true">{{ (user.name or 'U')[0] | upper }}</span>
+    <div style="min-width:0;">
         <h2>{{ user.name }}</h2>
         <p>{{ user.email }}{% if user.phone %} &middot; {{ user.phone }}{% endif %} &middot; {{ user.career_status }}</p>
     </div>
-    <div style="margin-left:auto;text-align:right">
-        <div style="font-size:20px;font-weight:700;color:var(--primary)">{{ completeness }}%</div>
-        <div class="muted">profile complete</div>
+    <div class="profile-banner__score">
+        <span class="profile-banner__pct">{{ completeness }}%</span>
+        <span class="profile-banner__label">profile complete</span>
     </div>
 </div>
 
@@ -128,8 +130,12 @@
             </div>
 
             {% if profile.summary %}
-                <label style="font-size:12.5px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">Summary (extracted by the Resume Parser)</label>
-                <p style="font-size:13.5px;line-height:1.6;margin:0 0 4px">{{ profile.summary }}</p>
+                {# Was "Summary (extracted by the Resume Parser)". The label
+                   described how the value arrived, which is not something the
+                   person reading their own profile needs; the meaning is
+                   unchanged. #}
+                <label style="font-size:var(--ai-t-xs);font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ai-ink-muted);display:block;margin-bottom:7px;">Summary</label>
+                <p style="font-size:var(--ai-t-base);line-height:1.7;margin:0;color:var(--ai-ink);">{{ profile.summary }}</p>
             {% endif %}
 
             <p class="muted" style="margin-top:10px">
@@ -193,200 +199,243 @@
         </div>
 
         <!-- ================= Education ================= -->
-        <div class="dash-card" id="education">
+        {# Every education record is a readable card in the closed state. One
+           "Edit Education" disclosure then holds a form per record, instead of
+           an Edit control crowding every card. The forms still post to the same
+           profile.record_update route with the same record_id, so no record is
+           duplicated and editing behaviour is unchanged. #}
+        <div class="ai-card" id="education">
             {{ section_head('Education', profile.education | length) }}
-            {% if profile.cgpa %}<p class="muted" style="margin:-8px 0 12px">CGPA: {{ profile.cgpa }}</p>{% endif %}
+            {% if profile.cgpa %}<p class="muted" style="margin:-6px 0 14px">CGPA: {{ profile.cgpa }}</p>{% endif %}
+
             {% if profile.education %}
                 {% for e in profile.education %}
-                <div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">
-                    <b style="font-size:14px">{{ e.degree or e.institution }}{% if e.degree and e.institution %} &mdash; {{ e.institution }}{% endif %}</b>
-                    {% if e.field %}<div class="muted" style="margin-top:2px">{{ e.field }}</div>{% endif %}
-                    {% if e.start_date or e.end_date %}
-                        <div class="muted" style="margin-top:2px">{{ e.start_date or '?' }} &ndash; {{ e.end_date or '?' }}</div>
+                <article class="record-card">
+                    <h4 class="record-card__title">
+                        {{ e.degree or e.institution }}{% if e.degree and e.institution %} &mdash; {{ e.institution }}{% endif %}
+                    </h4>
+                    {% if e.field %}<p class="record-card__meta">{{ e.field }}</p>{% endif %}
+                    {# Show only the dates that actually exist. A missing side is
+                       left out entirely rather than printed as a placeholder. #}
+                    {% if e.start_date and e.end_date %}
+                        <p class="record-card__meta">{{ e.start_date }} &ndash; {{ e.end_date }}</p>
+                    {% elif e.start_date %}
+                        <p class="record-card__meta">From {{ e.start_date }}</p>
+                    {% elif e.end_date %}
+                        <p class="record-card__meta">Until {{ e.end_date }}</p>
                     {% endif %}
-                    <details style="margin-top:8px">
-                        <summary style="cursor:pointer;font-size:12.5px;color:var(--primary)">Edit</summary>
-                        {{ record_form('profile.record_update', 'education', 'education', e) }}
-                        <div style="margin-top:10px">{{ record_actions('education', e) }}</div>
-                    </details>
-                </div>
+                </article>
                 {% endfor %}
-            {% else %}<p class="muted">No education saved yet.</p>{% endif %}
+            {% else %}<p class="sg-empty">No education saved yet.</p>{% endif %}
 
-            <details style="margin-top:6px">
-                <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--primary)">+ Add Education</summary>
-                <div style="margin-top:12px">{{ record_form('profile.record_add', 'education', 'education') }}</div>
-            </details>
+            <div class="section-actions">
+                {% if profile.education %}
+                <details class="disclosure">
+                    <summary>{{ icon('edit') }} Edit Education</summary>
+                    {% for e in profile.education %}
+                    <div style="margin-bottom:20px;padding-bottom:18px;border-bottom:1px solid var(--ai-line-soft);">
+                        <p class="record-card__title" style="margin-bottom:12px;">
+                            {{ e.degree or e.institution or 'Education entry' }}
+                        </p>
+                        {{ record_form('profile.record_update', 'education', 'education', e) }}
+                        <div style="margin-top:12px">{{ record_actions('education', e) }}</div>
+                    </div>
+                    {% endfor %}
+                </details>
+                {% endif %}
+
+                <details class="disclosure">
+                    <summary>{{ icon('plus') }} Add Education</summary>
+                    {{ record_form('profile.record_add', 'education', 'education') }}
+                </details>
+            </div>
         </div>
 
         <!-- ================= Experience ================= -->
-        <div class="dash-card" id="experience">
+        {# Experience keeps its own per-entry Edit disclosure, as before. #}
+        <div class="ai-card" id="experience">
             {{ section_head('Experience', profile.experience_list | length) }}
             {% if profile.experience_list %}
                 {% for x in profile.experience_list %}
-                <div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">
-                    <b style="font-size:14px">{{ x.title }}</b>
-                    {% if x.organization %}<span class="muted"> &mdash; {{ x.organization }}</span>{% endif %}
-                    {% if x.start_date or x.end_date %}
-                        <div class="muted" style="margin-top:2px">{{ x.start_date or '?' }} &ndash; {{ x.end_date or '?' }}</div>
+                <article class="record-card">
+                    <h4 class="record-card__title">{{ x.title }}</h4>
+                    {% if x.organization %}<p class="record-card__meta">{{ x.organization }}</p>{% endif %}
+                    {# Same rule as education: never print a placeholder for a missing side. #}
+                    {% if x.start_date and x.end_date %}
+                        <p class="record-card__meta">{{ x.start_date }} &ndash; {{ x.end_date }}</p>
+                    {% elif x.start_date %}
+                        <p class="record-card__meta">From {{ x.start_date }}</p>
+                    {% elif x.end_date %}
+                        <p class="record-card__meta">Until {{ x.end_date }}</p>
                     {% endif %}
                     {% if x.description %}
-                        <div style="font-size:13px;line-height:1.6;margin-top:6px;white-space:pre-line">{{ x.description }}</div>
+                        <p class="record-card__desc">{{ x.description }}</p>
                     {% endif %}
-                    <details style="margin-top:8px">
-                        <summary style="cursor:pointer;font-size:12.5px;color:var(--primary)">Edit</summary>
+                    <details class="disclosure" style="margin-top:12px;">
+                        <summary>{{ icon('edit') }} Edit</summary>
                         {{ record_form('profile.record_update', 'experience', 'experience', x) }}
-                        <div style="margin-top:10px">{{ record_actions('experience', x) }}</div>
+                        <div style="margin-top:12px">{{ record_actions('experience', x) }}</div>
                     </details>
-                </div>
+                </article>
                 {% endfor %}
-            {% else %}<p class="muted">No experience saved yet.</p>{% endif %}
+            {% else %}<p class="sg-empty">No experience saved yet.</p>{% endif %}
 
-            <details style="margin-top:6px">
-                <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--primary)">+ Add Experience</summary>
-                <div style="margin-top:12px">{{ record_form('profile.record_add', 'experience', 'experience') }}</div>
-            </details>
+            <div class="section-actions">
+                <details class="disclosure">
+                    <summary>{{ icon('plus') }} Add Experience</summary>
+                    {{ record_form('profile.record_add', 'experience', 'experience') }}
+                </details>
+            </div>
         </div>
 
         <!-- ================= Projects ================= -->
-        <div class="dash-card" id="projects">
+        <div class="ai-card" id="projects">
             {{ section_head('Projects', profile.projects | length) }}
             {% if profile.projects %}
                 {% for p in profile.projects %}
-                <div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">
-                    <b style="font-size:14px">{{ p.title }}</b>
+                <article class="record-card">
+                    <h4 class="record-card__title">{{ p.title }}</h4>
                     {% if p.description %}
-                        <div style="font-size:13px;line-height:1.6;margin-top:6px;white-space:pre-line">{{ p.description }}</div>
+                        <p class="record-card__desc">{{ p.description }}</p>
                     {% endif %}
                     {% if p.tech_stack %}
-                        <div class="tag-row" style="margin-top:8px">
-                            {% for tech in p.tech_stack.split(',') if p.tech_stack.strip() %}
-                            <span class="tag">{{ tech.strip() }}</span>
+                        <div class="ai-pill-row" style="margin-top:10px;">
+                            {% for tech in p.tech_stack.split(',') if tech.strip() %}
+                            <span class="ai-pill ai-pill--neutral">{{ tech.strip() }}</span>
                             {% endfor %}
                         </div>
                     {% endif %}
-                    <details style="margin-top:8px">
-                        <summary style="cursor:pointer;font-size:12.5px;color:var(--primary)">Edit</summary>
+                    <details class="disclosure" style="margin-top:12px;">
+                        <summary>{{ icon('edit') }} Edit</summary>
                         {{ record_form('profile.record_update', 'projects', 'projects', p) }}
-                        <div style="margin-top:10px">{{ record_actions('projects', p) }}</div>
+                        <div style="margin-top:12px">{{ record_actions('projects', p) }}</div>
                     </details>
-                </div>
+                </article>
                 {% endfor %}
-            {% else %}<p class="muted">No projects saved yet.</p>{% endif %}
+            {% else %}<p class="sg-empty">No projects saved yet.</p>{% endif %}
 
-            <details style="margin-top:6px">
-                <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--primary)">+ Add Project</summary>
-                <div style="margin-top:12px">{{ record_form('profile.record_add', 'projects', 'projects') }}</div>
-            </details>
+            <div class="section-actions">
+                <details class="disclosure">
+                    <summary>{{ icon('plus') }} Add Project</summary>
+                    {{ record_form('profile.record_add', 'projects', 'projects') }}
+                </details>
+            </div>
         </div>
     </div>
 
     <div class="dash-col">
         <!-- ================= Skills ================= -->
-        <div class="dash-card" id="skills">
+        <div class="ai-card" id="skills">
             {{ section_head('Skills', profile.skills | length) }}
             {% if profile.skills %}
-                <div class="tag-row" style="margin-bottom:12px">
+                <div class="ai-pill-row" style="margin-bottom:14px">
                     {% for s in profile.skills %}
-                    <span class="tag" title="{{ s.category or 'no category' }}">{{ s.name }}</span>
+                    <span class="ai-pill ai-pill--required" title="{{ s.category or 'no category' }}">{{ s.name }}</span>
                     {% endfor %}
                 </div>
-                <details>
-                    <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--primary)">Edit or remove skills</summary>
-                    <div style="margin-top:12px">
+                <details class="disclosure">
+                    <summary>{{ icon('edit') }} Edit or remove skills</summary>
+                    <div>
                         {% for s in profile.skills %}
-                        <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
-                            <span style="flex:1;font-size:13.5px">{{ s.name }}</span>
-                            <span class="muted" style="font-size:11.5px">{{ (s.category or 'other') | replace('_', ' ') }}</span>
-                            <button type="button" class="btn btn-outline" style="padding:4px 9px;font-size:12px"
+                        <div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--ai-line-soft)">
+                            <span style="flex:1;font-size:var(--ai-t-sm)">{{ s.name }}</span>
+                            <span class="muted" style="font-size:var(--ai-t-xs)">{{ (s.category or 'other') | replace('_', ' ') }}</span>
+                            <button type="button" class="ai-btn ai-btn--quiet ai-btn--sm"
                                     onclick="toggleSkillRow({{ s.id }})">Edit</button>
                             <form method="POST" action="{{ url_for('profile.skill_delete') }}" style="display:inline"
                                   onsubmit="return confirm('Remove {{ s.name }}?')">
                                 <input type="hidden" name="skill_id" value="{{ s.id }}">
-                                <button type="submit" class="btn btn-outline" style="padding:4px 9px;font-size:12px">Delete</button>
+                                <button type="submit" class="ai-btn ai-btn--quiet ai-btn--sm">Delete</button>
                             </form>
                             <form method="POST" action="{{ url_for('profile.skill_update') }}" id="skill-row-{{ s.id }}" style="display:none;width:100%">
                                 <input type="hidden" name="skill_id" value="{{ s.id }}">
-                                <div style="display:flex;gap:8px;margin-top:8px">
-                                    <input type="text" name="name" value="{{ s.name }}" style="flex:1">
-                                    <select name="category">
+                                <div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap">
+                                    <input type="text" name="name" value="{{ s.name }}" style="flex:1;min-width:140px">
+                                    <select name="category" style="width:auto">
                                         <option value="">Keep category</option>
                                         {% for cat in skill_categories %}
                                         <option value="{{ cat }}" {% if s.category == cat %}selected{% endif %}>{{ cat | replace('_', ' ') }}</option>
                                         {% endfor %}
                                     </select>
-                                    <button type="submit" class="btn btn-primary" style="padding:5px 12px;font-size:12px">Save</button>
+                                    <button type="submit" class="ai-btn ai-btn--primary ai-btn--sm">Save</button>
                                 </div>
                             </form>
                         </div>
                         {% endfor %}
                     </div>
                 </details>
-            {% else %}<p class="muted">No skills saved yet.</p>{% endif %}
+            {% else %}<p class="sg-empty">No skills saved yet.</p>{% endif %}
 
-            <details style="margin-top:10px">
-                <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--primary)">+ Add Skills</summary>
-                <form method="POST" action="{{ url_for('profile.skill_add') }}" class="profile-form" style="border:none;padding:0;margin-top:12px">
-                    <label for="new-skills">Skill names (comma separated)</label>
-                    <input type="text" id="new-skills" name="skills" placeholder="Python, SQL, PyTorch">
-                    <label for="new-skill-category">Category</label>
-                    <select id="new-skill-category" name="category">
-                        <option value="">No category</option>
-                        {% for cat in skill_categories %}
-                        <option value="{{ cat }}">{{ cat | replace('_', ' ') }}</option>
-                        {% endfor %}
-                    </select>
-                    <button type="submit" class="btn btn-primary" style="margin-top:12px">Add Skills</button>
-                </form>
-            </details>
-        </div>
-
-        <!-- ================= Certifications ================= -->
-        <div class="dash-card" id="certifications">
-            {{ section_head('Certifications', profile.certifications | length) }}
-            {% if profile.certifications %}
-                {% for c in profile.certifications %}
-                <div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">
-                    <b style="font-size:14px">{{ c.name }}</b>
-                    {% if c.issuer %}<span class="muted"> &mdash; {{ c.issuer }}</span>{% endif %}
-                    {% if c.issue_date or c.expiry_date %}
-                        <div class="muted" style="margin-top:2px">
-                            {% if c.issue_date %}Issued {{ c.issue_date }}{% endif %}
-                            {% if c.expiry_date %} &middot; Expires {{ c.expiry_date }}{% endif %}
-                        </div>
-                    {% endif %}
-                    {% if c.credential_url %}
-                        <div style="margin-top:4px"><a href="{{ c.credential_url }}" target="_blank" rel="noopener noreferrer" style="font-size:12.5px;word-break:break-all">Credential link</a></div>
-                    {% endif %}
-                    <details style="margin-top:8px">
-                        <summary style="cursor:pointer;font-size:12.5px;color:var(--primary)">Edit</summary>
-                        {{ record_form('profile.record_update', 'certifications', 'certifications', c) }}
-                        <div style="margin-top:10px">{{ record_actions('certifications', c) }}</div>
-                    </details>
-                </div>
-                {% endfor %}
-            {% else %}<p class="muted">No certifications saved yet.</p>{% endif %}
-
-            <details style="margin-top:6px">
-                <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--primary)">+ Add Certification</summary>
-                <div style="margin-top:12px">{{ record_form('profile.record_add', 'certifications', 'certifications') }}</div>
-            </details>
-        </div>
-
-        <!-- ================= Resume ================= -->
-        <div class="dash-card">
-            <div class="dash-card-head"><h3> Resume</h3></div>
-            <div class="resume-replace-box">
-                <div style="font-size:26px">&#128206;</div>
-                <p><b>Uploading a new resume replaces your current one</b><br>
-                   Your skills, education, experience, projects and certifications will be re-extracted automatically.</p>
-                <a href="{{ url_for('resume.upload') }}" class="btn btn-outline" style="margin-top:10px">Upload New Resume</a>
+            <div class="section-actions">
+                <details class="disclosure">
+                    <summary>{{ icon('plus') }} Add Skills</summary>
+                    <form method="POST" action="{{ url_for('profile.skill_add') }}" class="profile-form" style="border:none;padding:0">
+                        <label for="new-skills">Skill names (comma separated)</label>
+                        <input type="text" id="new-skills" name="skills" placeholder="Python, SQL, PyTorch">
+                        <label for="new-skill-category" style="margin-top:12px;">Category</label>
+                        <select id="new-skill-category" name="category">
+                            <option value="">No category</option>
+                            {% for cat in skill_categories %}
+                            <option value="{{ cat }}">{{ cat | replace('_', ' ') }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" class="ai-btn ai-btn--primary" style="margin-top:14px">Add Skills</button>
+                    </form>
+                </details>
             </div>
         </div>
 
+        <!-- ================= Certifications ================= -->
+        <div class="ai-card" id="certifications">
+            {{ section_head('Certifications', profile.certifications | length) }}
+            {% if profile.certifications %}
+                {% for c in profile.certifications %}
+                <article class="record-card">
+                    <h4 class="record-card__title">{{ c.name }}</h4>
+                    {% if c.issuer %}<p class="record-card__meta">{{ c.issuer }}</p>{% endif %}
+                    {% if c.issue_date or c.expiry_date %}
+                        <p class="record-card__meta">
+                            {% if c.issue_date %}Issued {{ c.issue_date }}{% endif %}
+                            {% if c.expiry_date %} &middot; Expires {{ c.expiry_date }}{% endif %}
+                        </p>
+                    {% endif %}
+                    {% if c.credential_url %}
+                        <p class="record-card__meta"><a href="{{ c.credential_url }}" target="_blank" rel="noopener noreferrer" style="word-break:break-all">Credential link</a></p>
+                    {% endif %}
+                    <details class="disclosure" style="margin-top:12px;">
+                        <summary>{{ icon('edit') }} Edit</summary>
+                        {{ record_form('profile.record_update', 'certifications', 'certifications', c) }}
+                        <div style="margin-top:12px">{{ record_actions('certifications', c) }}</div>
+                    </details>
+                </article>
+                {% endfor %}
+            {% else %}<p class="sg-empty">No certifications saved yet.</p>{% endif %}
+
+            <div class="section-actions">
+                <details class="disclosure">
+                    <summary>{{ icon('plus') }} Add Certification</summary>
+                    {{ record_form('profile.record_add', 'certifications', 'certifications') }}
+                </details>
+            </div>
+        </div>
+
+        <!-- ================= Resume ================= -->
+        {# The re-upload route is unchanged; only the panel is restyled. #}
+        <div class="ai-card upload-panel">
+            <h3>Upload a New Resume</h3>
+            <p>
+                Uploading replaces your current resume. Your skills, education, experience,
+                projects and certifications are re-extracted automatically, so check the
+                sections afterwards if anything looks wrong.
+            </p>
+            <a href="{{ url_for('resume.upload') }}" class="ai-btn ai-btn--primary ai-btn--lg">
+                Upload New Resume
+            </a>
+        </div>
+
         <!-- ================= Tips ================= -->
-        <div class="dash-card">
-            <div class="dash-card-head"><h3> Quick Tips to Improve Your Profile</h3></div>
+        <div class="ai-card">
+            {{ section_head('Quick Tips to Improve Your Profile', '') }}
             <div class="tip-list">
                 <div class="tip-item"><span class="tip-icon">{{ icon('check') }}</span> Keep your skills list specific &mdash; "React" and "Node.js" match better than "Web Development".</div>
                 <div class="tip-item"><span class="tip-icon">{{ icon('check') }}</span> Add measurable outcomes to your experience (e.g. "reduced load time by 30%").</div>

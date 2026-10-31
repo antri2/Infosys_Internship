@@ -10,10 +10,81 @@ profile store and nothing is kept in the browser.
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
 
 from database.db import get_db
+from services.job_dates import (
+    apply_by_for,
+    demo_badge,
+    is_demo_listing,
+    validated_publication_date,
+)
 from services.skill_normalizer import normalize_skill, skill_comparison_key
 
 profile_bp = Blueprint("profile", __name__, url_prefix="/profile")
 home_bp = Blueprint("home", __name__)
+
+# How many ranked jobs the dashboard asks for. This is the pool the ranking
+# produces; the card grid shows HOME_VISIBLE_JOBS of them first and the
+# "View More" action reveals the rest without a second request.
+HOME_JOB_COUNT = 9
+
+# How many cards are visible before "View More" is pressed.
+HOME_VISIBLE_JOBS = 6
+
+
+def _work_mode(job: dict) -> str:
+    """Work mode, only when the job's own text actually states one.
+
+    Neither source carries a work-mode column, so this reads the words the
+    source did publish. The description is included because it is the field most
+    likely to say "remote" or "hybrid" in context, but only an explicit word
+    counts -- proximity, inference or a company name never triggers it.
+    Anything else returns "", and the card then omits the row entirely rather
+    than showing a placeholder.
+    """
+    haystack = " ".join(
+        str(job.get(field) or "") for field in ("location", "job_type", "description")
+    ).lower()
+
+    if "hybrid" in haystack:
+        return "Hybrid"
+    if "remote" in haystack or "work from home" in haystack or "wfh" in haystack:
+        return "Remote"
+    if "on-site" in haystack or "onsite" in haystack or "in-office" in haystack:
+        return "On-site"
+    return ""
+
+
+def _card_job(job: dict) -> dict:
+    """Add the presentation fields a card needs, without inventing any.
+
+    Optional fields are normalised to "" when the source has nothing, so the
+    template renders nothing at all for them. That is what removes the literal
+    "Not provided" strings from the dashboard.
+    """
+    enriched = dict(job)
+
+    # Work mode: inferred from the job's own text, "" when not stated.
+    enriched["work_mode"] = _work_mode(job)
+
+    # Optional text fields become "" rather than a placeholder string.
+    for field in ("company", "location", "job_type", "stipend_or_salary",
+                  "description", "experience_required"):
+        enriched[field] = str(job.get(field) or "").strip()
+
+    # A publication date is shown only when the source value parses and is
+    # plausible. A local row's created_at is an import timestamp, not a posting
+    # date, so it is never used here; those listings are badged instead.
+    enriched["published_date"] = validated_publication_date(job.get("published_date"))
+
+    # No source publishes a deadline, so this is a suggested planning window.
+    # apply_by_for() keeps the employer's own date if one ever appears.
+    enriched["apply_by"] = apply_by_for(job)
+
+    # Generated listings are labelled as such rather than passed off as real.
+    enriched["is_demo"] = is_demo_listing(job)
+    enriched["demo_label"] = demo_badge(job)
+
+    return enriched
+
 
 # The categories the Resume Parser is instructed to emit (services/resume_parser.py).
 SKILL_CATEGORIES = ("programming_language", "framework", "tool", "soft_skill", "other")
@@ -201,7 +272,14 @@ def dashboard():
     # the 0.65 similarity floor and the ranking itself are untouched.
     from services.opportunity_service import recommend_jobs
 
-    top_jobs = recommend_jobs("", user_skills, top_k=10)
+    # The Home page ranks this many rows and renders them in a 3-column grid,
+    # six at a time behind a "View More" action. Retrieval, the similarity
+    # floor and the ranking itself are untouched; only the count differs.
+    top_jobs = recommend_jobs("", user_skills, top_k=HOME_JOB_COUNT)
+
+    # Presentation fields for the compact card. The ranking and the rows
+    # themselves are untouched; only what the card shows is prepared here.
+    top_jobs = [_card_job(job) for job in top_jobs]
 
     with db.cursor() as cursor:
         cursor.execute("SELECT COUNT(*) AS n FROM applications WHERE user_id = %s", (user_id,))
@@ -226,6 +304,7 @@ def dashboard():
         completeness=completeness,
         resume_uploaded=resume_uploaded,
         top_jobs=top_jobs,
+        home_visible_count=min(HOME_VISIBLE_JOBS, len(top_jobs)),
         applications_count=applications_count,
         recent_applications=recent_applications,
     )

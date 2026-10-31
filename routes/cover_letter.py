@@ -15,7 +15,7 @@ from database.db import get_db
 from services.agent_orchestrator import AgentOrchestrator
 from services.context_builder import get_job_context
 from services.cover_letter_agent import MAX_CONTEXT_LENGTH, CoverLetterNotFound
-from services.role_catalog import canonical_role, find_role_job, job_role, role_options
+from services.role_catalog import canonical_role, job_role, role_options
 
 
 cover_letter_bp = Blueprint("cover_letter", __name__, url_prefix="/cover-letter")
@@ -108,23 +108,22 @@ def _is_generic_request(payload: dict, extra_context: str = "") -> bool:
 
 
 def _resolve_optional_job(db, payload: dict):
-    """Resolve an explicit job or an internal representative for a role."""
-    job_id = _job_id(payload)
-    if job_id is not None:
-        job = get_job_context(db, job_id)
-        if job is None:
-            raise JobNotFound(f"Job {job_id} was not found.")
-        return job_id, job
+    """Resolve ONLY a job the user explicitly selected for this letter.
 
-    role = _target_role(payload)
-    if not role:
+    A role on its own is not a job. Resolving a "representative" posting from
+    the dataset for a bare role used to hand the agent a real employer name and
+    job description that the user never supplied, which made the letter claim
+    to be addressed to that company. Role-only requests now resolve to no job
+    at all and fall through to the general role mode.
+    """
+    job_id = _job_id(payload)
+    if job_id is None:
         return None, None
-    job = find_role_job(db, role)
+
+    job = get_job_context(db, job_id)
     if job is None:
-        # A custom/off-catalog role can still be written generically.  The
-        # route adds it to custom context below instead of exposing a job ID.
-        return None, None
-    return int(job["job_id"]), job
+        raise JobNotFound(f"Job {job_id} was not found.")
+    return job_id, job
 
 
 def _letter_id(payload: dict, required: bool = False):
@@ -172,6 +171,11 @@ def _letter_json(row: dict) -> dict:
         "content": row.get("content") or "",
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),
+        # The role this letter was written for, and the heading that identifies
+        # it. Both come from the same helper the saved list uses, so the list
+        # and the reading view never disagree about what a letter is.
+        "target_role": row.get("target_role") or "",
+        "heading": letter_heading(row),
         "job": {
             "job_id": row.get("job_id"),
             "title": row.get("job_title"),
@@ -183,6 +187,29 @@ def _letter_json(row: dict) -> dict:
 
 def _error(message: str, status: int):
     return jsonify({"success": False, "error": message}), status
+
+
+
+def letter_heading(letter: dict | None) -> str:
+    """The heading for a saved letter, which must name the target role.
+
+    The brief asks for the ambiguous "Generic Cover Letter" to go. A letter
+    attached to a job is named by that job. A role-specific generic letter is
+    named by its stored role. Only a letter with neither -- an older row saved
+    before the role was recorded -- falls back to the old wording, and it says
+    so explicitly rather than pretending to know.
+    """
+    letter = letter if isinstance(letter, dict) else {}
+    job_title = str(letter.get("job_title") or "").strip()
+    if job_title:
+        company = str(letter.get("job_company") or "").strip()
+        return f"Cover Letter / {job_title}" + (f" at {company}" if company else "")
+
+    role = str(letter.get("target_role") or "").strip()
+    if role:
+        return f"Generic Cover Letter / {role}"
+
+    return "Generic Cover Letter (no role recorded)"
 
 
 @cover_letter_bp.route("/", methods=["GET"])
@@ -216,8 +243,9 @@ def view():
         except ValueError:
             error = "A valid target job is required."
 
-    # A normal page load remains generic.  A role query may resolve a
-    # representative synchronized job internally, without displaying its ID.
+    # A normal page load stays generic. A role query only sets the role; it
+    # never attaches a job, because that would silently supply the employer and
+    # job description to the letter the user is about to generate.
     if selected_job_id:
         try:
             selected_job = get_job_context(db, int(selected_job_id))
@@ -235,16 +263,6 @@ def view():
                 selected_role = _target_role({"target_role": raw_role})
             except ValueError:
                 error = "A valid target role is required."
-        if selected_role:
-            try:
-                selected_job = find_role_job(db, selected_role)
-                if selected_job is None:
-                    error = f"No synchronized job was found for {selected_role}."
-                else:
-                    selected_job_id = int(selected_job["job_id"])
-            except Exception:
-                logger.exception("Could not resolve role representative for Cover Letter")
-                error = "The selected role could not be loaded right now."
 
     try:
         letters = orchestrator.list_cover_letters()
@@ -260,7 +278,9 @@ def view():
         selected_job_id=selected_job_id,
         selected_job=selected_job,
         selected_letter=selected_letter,
+        selected_letter_heading=letter_heading(selected_letter),
         letters=letters,
+        letter_headings={row["id"]: letter_heading(row) for row in letters},
         error=error,
     )
 
@@ -324,12 +344,15 @@ def save():
         content = _edited_content(payload)
         letter_id = _letter_id(payload)
         job_id = _job_id(payload)
+        # The role the user selected, stored so the saved list can identify a
+        # generic letter by role instead of an ambiguous "Generic Cover Letter".
+        target_role = _target_role(payload)
     except ValueError as exc:
         return _error(str(exc), 400)
 
     try:
         result = AgentOrchestrator(get_db(), session["user_id"]).save_cover_letter(
-            content, job_id, letter_id
+            content, job_id, letter_id, target_role=target_role
         )
     except CoverLetterNotFound:
         return _error("The saved cover letter was not found.", 404)
@@ -345,6 +368,7 @@ def save():
         "letter_id": result["letter_id"],
         "job_id": result["job_id"],
         "job": result["job"],
+        "target_role": result.get("target_role", ""),
         "content": result["content"],
         "saved": True,
     })
@@ -413,8 +437,14 @@ def regenerate():
         if letter_id is None:
             result = orchestrator.generate_cover_letter(job_id, extra_context)
         else:
+            # Only reuse the saved letter's job when the user has not asked for
+            # a role-only/general letter; otherwise the previous company and job
+            # description would leak into the new draft.
+            inherit_saved_job = explicit_job_id is None and not target_role and not _is_generic_request(
+                payload, extra_context
+            )
             result = orchestrator.regenerate_cover_letter(
-                letter_id, job_id, extra_context
+                letter_id, job_id, extra_context, inherit_saved_job=inherit_saved_job
             )
     except CoverLetterNotFound:
         return _error("The saved cover letter was not found.", 404)

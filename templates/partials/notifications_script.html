@@ -1,0 +1,225 @@
+{# Header notification drawer behaviour. Loaded on every authenticated page from
+   app_shell.html. The drawer is filled from the existing /notifications/
+   endpoint, so every row shown is a notification the app actually produced.
+   Fails silently: if the list cannot load, the rest of the page keeps working. #}
+<script>
+(function () {
+    const bell = document.getElementById('notificationBell');
+    const drawer = document.getElementById('notificationDrawer');
+    if (!bell || !drawer) return;
+
+    const body = document.getElementById('notificationDrawerBody');
+    const backdrop = document.getElementById('notificationBackdrop');
+    const closeBtn = document.getElementById('notificationDrawerClose');
+    const readAllBtn = document.getElementById('notificationReadAll');
+    const badge = document.getElementById('notificationBadge');
+    const subtitle = document.getElementById('notificationDrawerSub');
+
+    const listUrl = {{ url_for('notifications.list_notifications_view') | tojson }};
+    const readAllUrl = {{ url_for('notifications.read_all') | tojson }};
+    const readUrlTemplate = {{ url_for('notifications.read_one', notification_id=0) | tojson }};
+
+    // readUrlTemplate renders as "/notifications/0/read": the 0 is a sentinel,
+    // so the id is substituted as the whole path segment. Anchoring the replace
+    // at the end of the string would never match, because the URL ends in
+    // "/read" -- that silently posted to /notifications/0/read and 404'd.
+    function readUrlFor(id) {
+        return readUrlTemplate.replace('/0/', '/' + encodeURIComponent(id) + '/');
+    }
+
+    let loaded = false;
+    let busy = false;
+
+    const CATEGORY_LABELS = {
+        opportunity: 'Opportunity',
+        skill_gap: 'Skill Gap',
+        application: 'Application'
+    };
+
+    function setBadge(count) {
+        const total = Number(count) || 0;
+        if (!badge) return;
+        badge.textContent = total > 99 ? '99+' : String(total);
+        badge.classList.toggle('is-hidden', total === 0);
+    }
+
+    function escapeHtml(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function formatTimestamp(value) {
+        if (!value) return '';
+        const parsed = new Date(value);
+        if (isNaN(parsed.getTime())) return '';
+        return parsed.toLocaleString(undefined, {
+            year: 'numeric', month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit'
+        });
+    }
+
+    function renderEmpty() {
+        body.innerHTML =
+            '<div class="notification-empty-state">' +
+            '<span class="notification-empty-icon" aria-hidden="true">&#128276;</span>' +
+            '<p class="notification-empty"><strong>You are all caught up.</strong></p>' +
+            '<p class="notification-empty">New opportunities, skill gap updates, and ' +
+            'application status changes will appear here.</p></div>';
+        if (readAllBtn) readAllBtn.hidden = true;
+        if (subtitle) subtitle.textContent = 'No new notifications';
+    }
+
+    function render(items, unread) {
+        if (!items.length) { renderEmpty(); return; }
+
+        const rows = items.map(function (item) {
+            const label = CATEGORY_LABELS[item.category] || 'Update';
+            const stamp = formatTimestamp(item.created_at);
+            const link = item.link
+                ? '<a class="notification-link" href="' + escapeHtml(item.link) + '">View</a>'
+                : '';
+            return '<article class="notification-item' +
+                (item.is_read ? '' : ' is-unread') +
+                '" data-notification-id="' + escapeHtml(item.id) + '" tabindex="0">' +
+                '<div class="notification-item-top">' +
+                '<span class="notification-category">' + escapeHtml(label) + '</span>' +
+                (item.is_read ? '' : '<span class="notification-unread-dot" aria-label="Unread"></span>') +
+                '</div>' +
+                '<p class="notification-title">' + escapeHtml(item.title) + '</p>' +
+                (item.body ? '<p class="notification-body">' + escapeHtml(item.body) + '</p>' : '') +
+                '<div class="notification-item-foot">' +
+                (stamp ? '<span class="notification-time">' + escapeHtml(stamp) + '</span>' : '') +
+                link + '</div></article>';
+        }).join('');
+
+        body.innerHTML = rows;
+        if (readAllBtn) readAllBtn.hidden = unread === 0;
+        if (subtitle) {
+            subtitle.textContent = unread > 0 ? unread + ' unread' : 'All notifications read';
+        }
+        setBadge(unread);
+
+        body.querySelectorAll('.notification-item[data-notification-id]').forEach(function (row) {
+            const mark = function () { markOne(row); };
+            row.addEventListener('click', mark);
+            row.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    mark();
+                }
+            });
+        });
+    }
+
+    async function markOne(row) {
+        const id = row.getAttribute('data-notification-id');
+        if (!id || busy) return;
+        busy = true;
+        row.classList.remove('is-unread');
+        const dot = row.querySelector('.notification-unread-dot');
+        if (dot) dot.remove();
+        try {
+            const response = await fetch(readUrlFor(id), {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Accept': 'application/json' }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setBadge(data.unread);
+                if (readAllBtn) readAllBtn.hidden = !data.unread;
+                if (subtitle) {
+                    subtitle.textContent = data.unread > 0
+                        ? data.unread + ' unread'
+                        : 'All notifications read';
+                }
+            }
+        } catch (error) {
+            /* Leave the row marked unread if the request failed. */
+        } finally {
+            busy = false;
+        }
+    }
+
+    async function markAllRead() {
+        if (busy) return;
+        busy = true;
+        try {
+            const response = await fetch(readAllUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Accept': 'application/json' }
+            });
+            if (response.ok) {
+                body.querySelectorAll('.notification-item').forEach(function (row) {
+                    row.classList.remove('is-unread');
+                    const dot = row.querySelector('.notification-unread-dot');
+                    if (dot) dot.remove();
+                });
+                setBadge(0);
+                if (readAllBtn) readAllBtn.hidden = true;
+                if (subtitle) subtitle.textContent = 'All notifications read';
+            }
+        } catch (error) {
+            /* Nothing to do; the badge stays as it was. */
+        } finally {
+            busy = false;
+        }
+    }
+
+    async function load() {
+        body.innerHTML = '<p class="notification-empty">Loading notifications&hellip;</p>';
+        try {
+            const response = await fetch(listUrl, {
+                credentials: 'same-origin',
+                headers: { 'Accept': 'application/json' }
+            });
+            if (!response.ok) { renderEmpty(); return; }
+            const data = await response.json();
+            render(data.notifications || [], data.unread || 0);
+        } catch (error) {
+            renderEmpty();
+        }
+    }
+
+    function openDrawer() {
+        drawer.hidden = false;
+        if (backdrop) backdrop.hidden = false;
+        // Force a layout pass so the closed transform is the transition's start
+        // state, then open in the same tick. Relying on requestAnimationFrame
+        // here would silently do nothing in a background tab, where rAF is
+        // throttled, leaving the drawer fetched but invisible.
+        void drawer.offsetWidth;
+        drawer.classList.add('is-open');
+        if (backdrop) backdrop.classList.add('is-open');
+        bell.setAttribute('aria-expanded', 'true');
+        document.body.classList.add('notification-drawer-open');
+        if (!loaded) { loaded = true; load(); }
+    }
+
+    function closeDrawer() {
+        drawer.classList.remove('is-open');
+        if (backdrop) backdrop.classList.remove('is-open');
+        bell.setAttribute('aria-expanded', 'false');
+        document.body.classList.remove('notification-drawer-open');
+        // Keep it out of the tab order once the slide-out finishes.
+        setTimeout(function () { drawer.hidden = true; }, 220);
+        if (backdrop) setTimeout(function () { backdrop.hidden = true; }, 220);
+    }
+
+    window.toggleNotifications = function (event) {
+        if (event) event.stopPropagation();
+        if (drawer.classList.contains('is-open')) { closeDrawer(); return; }
+        openDrawer();
+    };
+
+    if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
+    if (backdrop) backdrop.addEventListener('click', closeDrawer);
+    if (readAllBtn) readAllBtn.addEventListener('click', markAllRead);
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && drawer.classList.contains('is-open')) closeDrawer();
+    });
+})();
+</script>

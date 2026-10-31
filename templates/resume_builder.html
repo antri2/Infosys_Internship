@@ -1,280 +1,834 @@
 {% extends "app_shell.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Resume Builder - CareerAI{% endblock %}
+
+{#
+   Layout intent
+   -------------
+   One narrow column of controls (role, template, instructions, saved resumes)
+   beside the thing the user actually came for: the resume. After generation
+   the preview and its actions own the page, and the raw profile data is
+   demoted to a clearly-labelled reference panel so the two are never confused.
+
+   The preview is server-rendered from `document` -- the same dict the PDF and
+   TXT downloads are rendered from -- so what is on screen is what downloads.
+   The editor keeps its state in one hidden JSON field, which is why adding,
+   removing and reordering sections needs no round trip.
+#}
+
 {% block app_content %}
 
 <div class="page-head">
     <h1>Resume Builder</h1>
-    <p>Create a clean, ATS-friendly resume for a role, then review and approve every change before saving.</p>
-</div>
-
-<div class="dash-card">
-    <div class="dash-card-head"><h3>Build Your Resume</h3></div>
-    <form method="POST" action="{{ url_for('resume_builder.generate') }}" id="resume-generation-form" class="resume-generation-form">
-        <div class="form-grid">
-            <div>
-                <label for="target-role"><strong>Target Role</strong></label>
-                <select id="target-role" name="target_role" required style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;">
-                    <option value="">Select a role</option>
-                    {% for role in role_options %}
-                    <option value="{{ role }}" {% if selected_role == role %}selected{% endif %}>{{ role }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div>
-                <label for="resume-template"><strong>Resume Template</strong></label>
-                <select id="resume-template" name="template" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;">
-                    {% for key, item in templates.items() %}
-                    <option value="{{ key }}" {% if selected_template == key %}selected{% endif %}>{{ item.label }}</option>
-                    {% endfor %}
-                </select>
-                <p class="muted" style="margin:8px 0 0;">{{ selected_template_description }}</p>
-            </div>
-        </div>
-        <label for="custom-instructions" style="display:block;margin-top:16px;"><strong>Custom Instructions (optional)</strong></label>
-        <textarea id="custom-instructions" name="custom_instructions" rows="6" maxlength="5000"
-                  placeholder="Make my resume suitable for Data Analyst roles and emphasize Excel and SQL&#10;Highlight my Document QA project&#10;Focus on Python and Machine Learning"
-                  style="width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;line-height:1.55;">{{ custom_instructions or '' }}</textarea>
-        <p class="muted" style="margin:8px 0 0;">Tell the agent how to tailor the resume. Requests to highlight a skill or project are only applied when that item is already in your profile, so nothing is ever invented.</p>
-        <div class="opportunity-actions" style="margin-top:16px;">
-            <button type="submit" class="btn btn-primary">Generate Tailored Resume</button>
-        </div>
-    </form>
-    <form method="GET" action="{{ url_for('resume_builder.view') }}" class="resume-load-form" style="margin-top:10px;">
-        <input type="hidden" name="target_role" value="{{ selected_role }}">
-        <input type="hidden" name="template" value="{{ selected_template }}">
-        <button type="submit" class="btn btn-outline" {% if not selected_role %}disabled{% endif %}>Load Saved Version</button>
-    </form>
+    <p>Build a role-specific resume, edit any section, and keep separate versions for each application.</p>
 </div>
 
 {% if error %}
-<div class="flash-banner" style="margin-top:16px;"><p>{{ error }}</p></div>
-{% endif %}
-
-{% if selected_role %}
-<div class="dash-card" style="margin-top:20px;">
-    <div class="dash-card-head"><h3>Role-Level Tailoring Context</h3></div>
-    <p><strong>{{ selected_role }}</strong></p>
-    <p class="muted">Role-level requirements are used for guidance; no individual job or job identifier is selected.</p>
-    {% if role_requirements.required or role_requirements.preferred %}
-    <p class="muted"><strong>Required:</strong> {{ role_requirements.required or 'None listed' }}</p>
-    <p class="muted"><strong>Preferred:</strong> {{ role_requirements.preferred or 'None listed' }}</p>
-    {% endif %}
+<div class="flash-banner flash-banner--error" role="alert">
+    <p>{{ error }}</p>
 </div>
 {% endif %}
 
-<div class="dash-card" style="margin-top:20px;">
-    <div class="dash-card-head"><h3>Current Profile</h3></div>
-    <p><strong>{{ candidate.name or 'Candidate' }}</strong></p>
-    {% if candidate.email %}<p class="muted">{{ candidate.email }}{% if candidate.phone %} · {{ candidate.phone }}{% endif %}</p>{% endif %}
-    <p class="muted">{{ candidate.college or 'College not provided' }}{% if candidate.degree %} · {{ candidate.degree }}{% endif %}</p>
-    <p class="muted">{% if candidate.cgpa is not none %}CGPA: {{ candidate.cgpa }}{% else %}CGPA not provided{% endif %}{% if candidate.passing_year %} · Passing year: {{ candidate.passing_year }}{% endif %}</p>
-    {% if candidate.summary %}<p>{{ candidate.summary }}</p>{% endif %}
+{% if notice %}
+<div class="flash-banner flash-banner--success" role="status">
+    <p>{{ notice }}</p>
 </div>
+{% endif %}
 
-<div class="dash-card" style="margin-top:20px;">
-    <div class="dash-card-head"><h3>Verified Profile Sections</h3></div>
-    <div class="dash-grid">
-        <div class="dash-col">
-            <h4>Skills</h4>
-            <div class="skill-pill-row">
-                {% for skill in candidate.skills %}<span class="skill-pill have">{{ skill }}</span>{% else %}<span class="muted">No skills recorded.</span>{% endfor %}
+<div class="rb-layout">
+
+    <!-- ===================== Controls ===================== -->
+    <aside class="rb-controls" aria-label="Resume Builder settings">
+
+        <section class="rb-panel">
+            <h2 class="rb-panel__title">Build</h2>
+
+            <form method="POST" action="{{ url_for('resume_builder.generate') }}"
+                  id="resume-generation-form" class="resume-generation-form">
+
+                <label class="rb-field" for="target-role">
+                    <span class="rb-field__label">Target Role</span>
+                    <select id="target-role" name="target_role" required class="rb-input">
+                        <option value="">Select a role</option>
+                        {% for role in role_options %}
+                        <option value="{{ role }}" {% if selected_role == role %}selected{% endif %}>{{ role }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+
+                <label class="rb-field" for="resume-template">
+                    <span class="rb-field__label">Resume Template</span>
+                    <select id="resume-template" name="template" class="rb-input">
+                        {% for key, item in templates.items() %}
+                        <option value="{{ key }}" {% if selected_template == key %}selected{% endif %}>{{ item.label }}</option>
+                        {% endfor %}
+                    </select>
+                    <span class="rb-field__hint">{{ selected_template_description }}</span>
+                </label>
+
+                <label class="rb-field" for="custom-instructions">
+                    <span class="rb-field__label">Custom Instructions (optional)</span>
+                    <textarea id="custom-instructions" name="custom_instructions" rows="5"
+                              maxlength="5000" class="rb-input rb-input--area"
+                              placeholder="Emphasize my SQL and reporting experience&#10;Put the Resume Ranker project first&#10;Keep the summary to two lines">{{ custom_instructions or '' }}</textarea>
+                    <span class="rb-field__hint">
+                        Highlight requests are applied only when that skill or project is already in your profile, so nothing is invented.
+                    </span>
+                </label>
+
+                <button type="submit" class="ai-btn ai-btn--primary ai-btn--block" id="generate-resume">
+                    <span class="ai-btn__label">Generate Tailored Resume</span>
+                </button>
+                <p class="rb-busy" id="generate-busy" hidden role="status">
+                    <span class="rb-spinner" aria-hidden="true"></span>
+                    Generating your resume&hellip; this can take up to a minute.
+                </p>
+            </form>
+        </section>
+
+        {% if selected_role %}
+        <section class="rb-panel">
+            <h2 class="rb-panel__title">{{ selected_role }} &mdash; role context</h2>
+            <p class="rb-muted">Role requirements are used as guidance. No single job or employer is selected.</p>
+            {% if role_requirements.required or role_requirements.preferred %}
+            <dl class="rb-deflist">
+                <dt>Required</dt><dd>{{ role_requirements.required or 'None listed' }}</dd>
+                <dt>Preferred</dt><dd>{{ role_requirements.preferred or 'None listed' }}</dd>
+            </dl>
+            {% endif %}
+        </section>
+        {% endif %}
+
+        <!-- ============ Saved resumes ============ -->
+        <section class="rb-panel">
+            <h2 class="rb-panel__title">Saved Resumes <span class="rb-count">{{ versions|length }}</span></h2>
+
+            {% if versions %}
+            <ul class="rb-versions">
+                {% for version in versions %}
+                <li class="rb-version {{ 'is-open' if open_version and open_version.id == version.id }}">
+                    <div class="rb-version__main">
+                        <a class="rb-version__title"
+                           href="{{ url_for('resume_builder.view', version=version.id) }}">{{ version.title }}</a>
+                        <p class="rb-version__meta">
+                            {% if version.target_role %}<span>{{ version.target_role }}</span>{% endif %}
+                            {% if version.company %}<span>{{ version.company }}</span>{% endif %}
+                            <span>{{ version.template_key|replace('_', ' ')|title }}</span>
+                        </p>
+                    </div>
+
+                    <div class="rb-version__actions">
+                        <form method="POST" action="{{ url_for('resume_builder.rename_version', version_id=version.id) }}"
+                              class="rb-rename">
+                            <label class="sr-only" for="rename-{{ version.id }}">New name for {{ version.title }}</label>
+                            <input id="rename-{{ version.id }}" name="title" value="{{ version.title }}"
+                                   maxlength="200" class="rb-input rb-input--tiny">
+                            <button type="submit" class="ai-btn ai-btn--quiet">Rename</button>
+                        </form>
+
+                        <a class="ai-btn ai-btn--quiet"
+                           href="{{ url_for('resume_builder.download_pdf', version_id=version.id) }}">PDF</a>
+                        <a class="ai-btn ai-btn--quiet"
+                           href="{{ url_for('resume_builder.download_txt', version_id=version.id) }}">TXT</a>
+
+                        <form method="POST" action="{{ url_for('resume_builder.delete_version', version_id=version.id) }}"
+                              data-confirm="Delete “{{ version.title }}”? This cannot be undone."
+                              onsubmit="return confirm(this.dataset.confirm);">
+                            <button type="submit" class="ai-btn ai-btn--danger">Delete</button>
+                        </form>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+            <p class="rb-muted">Each saved resume is independent. Editing or deleting one leaves the others and your profile untouched.</p>
+            {% else %}
+            <p class="rb-muted">No saved resumes yet. Generate one, then use <strong>Save Resume</strong> to keep it.</p>
+            {% endif %}
+        </section>
+    </aside>
+
+    <!-- ===================== Resume ===================== -->
+    <main class="rb-main">
+
+        {% if document and document.sections %}
+        {# ---- Open saved version banner ---- #}
+        {% if open_version %}
+        <div class="rb-open-banner">
+            <div>
+                <strong>Editing saved resume:</strong> {{ open_version.title }}
+                {% if open_version.company %} &middot; {{ open_version.company }}{% endif %}
             </div>
-            <h4 style="margin-top:20px;">Education</h4>
-            {% for education in candidate.education %}
-            <p><strong>{{ education.degree or 'Degree not provided' }}</strong> — {{ education.institution }} {% if education.start_date or education.end_date %}({{ education.start_date or '' }} - {{ education.end_date or '' }}){% endif %}</p>
-            {% else %}<p class="muted">No education records available.</p>{% endfor %}
+            <a class="ai-btn ai-btn--quiet" href="{{ url_for('resume_builder.view') }}">Close</a>
         </div>
-        <div class="dash-col">
-            <h4>Experience</h4>
-            {% for experience in candidate.experience %}
-            <p><strong>{{ experience.title }}</strong> — {{ experience.organization or 'Organization not provided' }}</p>
-            {% if experience.description %}<p class="muted">{{ experience.description }}</p>{% endif %}
-            {% else %}<p class="muted">No experience records available.</p>{% endfor %}
-            <h4 style="margin-top:20px;">Projects</h4>
-            {% for project in candidate.projects %}
-            <p><strong>{{ project.title }}</strong>{% if project.tech_stack %} · {{ project.tech_stack }}{% endif %}</p>
-            {% if project.description %}<p class="muted">{{ project.description }}</p>{% endif %}
-            {% else %}<p class="muted">No projects available.</p>{% endfor %}
+        {% endif %}
+
+        <!-- ---- Action bar: the five things the user came to do ---- -->
+        <div class="rb-actions" role="group" aria-label="Resume actions">
+            <h2 class="rb-actions__title">Tailored Resume Preview</h2>
+
+            {% if result %}
+            <p class="rb-muted">
+                {% if result.from_cache %}Loaded saved version.{% else %}Newly generated version.{% endif %}
+                {% if result.used_fallback %} AI fallback used.{% endif %}
+            </p>
+            {% endif %}
+
+            {% if saved %}
+            <div class="rb-inline-success" role="status">
+                <p>Draft saved exactly as approved.</p>
+                {% if profile_updates.summary_updated %}<p>Approved summary copied to your profile.</p>{% endif %}
+                {% if profile_updates.skills_added %}<p>Added user-provided skills: {{ profile_updates.skills_added|join(', ') }}.</p>{% endif %}
+                {% if profile_updates.projects_added %}<p>Added user-provided projects: {{ profile_updates.projects_added|join(', ') }}.</p>{% endif %}
+                {% if profile_updates.experience_added %}<p>Added user-provided experience: {{ profile_updates.experience_added|join(', ') }}.</p>{% endif %}
+            </div>
+            {% endif %}
+
+            <div class="rb-actions__row">
+                <button type="button" class="ai-btn ai-btn--navy" id="toggle-editor"
+                        aria-expanded="false" aria-controls="resume-editor-panel">Edit</button>
+                <button type="button" class="ai-btn ai-btn--primary" id="save-resume">Save Resume</button>
+                <button type="button" class="ai-btn ai-btn--ghost" id="download-pdf">Download PDF</button>
+                <button type="button" class="ai-btn ai-btn--ghost" id="download-txt">Download TXT</button>
+                <p class="rb-busy" id="action-busy" hidden role="status">
+                    <span class="rb-spinner" aria-hidden="true"></span>
+                    <span id="action-busy-text">Working&hellip;</span>
+                </p>
+            </div>
         </div>
-    </div>
+
+        <!-- ---- The document ---- -->
+        <div class="rb-preview" id="resume-preview">
+            {{ document_html|safe }}
+        </div>
+
+        {% if result and result.fact_check_status %}
+        <p class="rb-factcheck">
+            <span class="status-badge {{ 'applied' if result.fact_check_status == 'passed' else 'under_review' }}">
+                Fact check: {{ result.fact_check_status }}
+            </span>
+        </p>
+        {% endif %}
+
+        {# The exact text that was approved and stored for this draft. Shown
+           verbatim, whitespace included, because "saved exactly as approved"
+           is a promise the user is entitled to see honoured. #}
+        {% if result and result.user_approved and result.resume_text %}
+        <details class="rb-details">
+            <summary>Approved plain-text version</summary>
+            <p class="rb-muted">This is stored character-for-character as approved. The preview above is the formatted document.</p>
+            <pre class="rb-plaintext">{{ result.resume_text }}</pre>
+        </details>
+        {% endif %}
+
+        {% if result and result.user_updates and (result.user_updates.skills or result.user_updates.projects or result.user_updates.experience) %}
+        <p class="rb-muted">User-provided additions included in this draft: review them before saving.</p>
+        {% endif %}
+
+        <!-- ---- Section editor ---- -->
+        {# The single source of truth the editor mutates. Save and both
+           downloads post exactly this value, so a preview can never disagree
+           with what is downloaded. #}
+        <script type="application/json" id="document-json">{{ document_json|safe }}</script>
+
+        <section class="rb-editor" id="resume-editor-panel" hidden aria-label="Edit resume sections">
+            <div class="rb-editor__head">
+                <h2>Edit sections</h2>
+                <p class="rb-muted">
+                    Changes apply to this resume only. Your profile and other saved resumes are never modified.
+                </p>
+            </div>
+
+            <div id="section-editor" class="rb-sections"></div>
+
+            <div class="rb-editor__add">
+                <span class="rb-field__label">Add a section</span>
+                <div class="rb-editor__add-row">
+                    {% for key, label in section_kinds.items() %}
+                    <button type="button" class="ai-btn ai-btn--quiet" data-add-section="{{ key }}">+ {{ label }}</button>
+                    {% endfor %}
+                </div>
+            </div>
+        </section>
+
+        <!-- ---- AI suggestions: review only, never injected automatically ---- -->
+        {% if result and result.ai_suggestions and (result.ai_suggestions.professional_summary or result.ai_suggestions.experience or result.ai_suggestions.projects) %}
+        <details class="rb-details">
+            <summary>AI Wording Suggestions &mdash; review only</summary>
+            <p class="rb-muted">These are not treated as verified facts until you accept them.</p>
+            {% if result.ai_suggestions.professional_summary %}
+            <p><strong>Suggested summary:</strong> {{ result.ai_suggestions.professional_summary }}</p>
+            {% endif %}
+            {% for suggestion in result.ai_suggestions.experience %}
+            <p><strong>{{ suggestion.title }}{% if suggestion.organization %} &mdash; {{ suggestion.organization }}{% endif %}</strong></p>
+            <ul>{% for bullet in suggestion.bullets %}<li>{{ bullet }}</li>{% endfor %}</ul>
+            {% endfor %}
+            {% for suggestion in result.ai_suggestions.projects %}
+            <p><strong>{{ suggestion.title }}</strong></p>
+            <ul>{% for bullet in suggestion.bullets %}<li>{{ bullet }}</li>{% endfor %}</ul>
+            {% endfor %}
+        </details>
+        {% endif %}
+
+        {% if result and result.flagged_claims %}
+        <details class="rb-details rb-details--warn">
+            <summary>Flagged / unverified claims ({{ result.flagged_claims|length }})</summary>
+            <ul>{% for claim in result.flagged_claims %}<li>{{ claim.claim }} &mdash; {{ claim.reason }}</li>{% endfor %}</ul>
+        </details>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('resume_builder.regenerate') }}"
+              class="resume-regenerate-form rb-regenerate">
+            <input type="hidden" name="target_role" value="{{ selected_role }}">
+            <input type="hidden" name="template" value="{{ selected_template }}">
+            <input type="hidden" name="custom_instructions" value="{{ custom_instructions or '' }}">
+            <button type="submit" class="ai-btn ai-btn--quiet">Regenerate with Fresh AI Pass</button>
+            <span class="rb-muted">Your saved resumes are not affected.</span>
+        </form>
+
+        {% else %}
+        <!-- ---- Empty state ---- -->
+        <div class="rb-empty">
+            <h2>No resume yet</h2>
+            <p>Choose a target role and select <strong>Generate Tailored Resume</strong>. You will be able to edit every section, save separate versions, and download a PDF before anything is saved to your profile.</p>
+        </div>
+        {% endif %}
+
+        <!-- ===================== Reference data ===================== -->
+        {# Deliberately after the resume, and explicitly labelled, so the
+           generated document is never mistaken for the source profile. #}
+        <section class="rb-reference">
+            <h2 class="rb-reference__title">Reference: your profile</h2>
+            <p class="rb-muted">
+                This is your stored profile. The resume above is a separate, editable document &mdash; it does not change anything here unless you explicitly ask for a profile update.
+            </p>
+
+            <div class="rb-reference__grid">
+                <div>
+                    <h3>Current Profile</h3>
+                    <p><strong>{{ candidate.name or 'Candidate' }}</strong></p>
+                    {% if candidate.email %}<p class="rb-muted">{{ candidate.email }}{% if candidate.phone %} &middot; {{ candidate.phone }}{% endif %}</p>{% endif %}
+                    <p class="rb-muted">{{ candidate.college or 'College not provided' }}{% if candidate.degree %} &middot; {{ candidate.degree }}{% endif %}</p>
+                    <p class="rb-muted">
+                        {% if candidate.cgpa is not none %}CGPA: {{ candidate.cgpa }}{% else %}CGPA not provided{% endif %}
+                        {% if candidate.passing_year %} &middot; Passing year: {{ candidate.passing_year }}{% endif %}
+                    </p>
+                    {% if candidate.summary %}<p>{{ candidate.summary }}</p>{% endif %}
+                </div>
+
+                <div>
+                    <h3>Verified Skills</h3>
+                    <div class="rb-pills">
+                        {% for skill in candidate.skills %}<span class="ai-pill ai-pill--have">{{ skill }}</span>
+                        {% else %}<span class="rb-muted">No skills recorded.</span>{% endfor %}
+                    </div>
+
+                    <h3>Education</h3>
+                    {% for education in candidate.education %}
+                    <p><strong>{{ education.degree or 'Degree not provided' }}</strong> &mdash; {{ education.institution }}
+                        {% if education.start_date or education.end_date %}({{ education.start_date or '' }} &ndash; {{ education.end_date or '' }}){% endif %}
+                    </p>
+                    {% else %}<p class="rb-muted">No education records available.</p>{% endfor %}
+                </div>
+
+                <div>
+                    <h3>Experience</h3>
+                    {% for experience in candidate.experience %}
+                    <p><strong>{{ experience.title }}</strong>{% if experience.organization %} &mdash; {{ experience.organization }}{% endif %}</p>
+                    {% if experience.description %}<p class="rb-muted">{{ experience.description }}</p>{% endif %}
+                    {% else %}<p class="rb-muted">No experience records available.</p>{% endfor %}
+
+                    <h3>Projects</h3>
+                    {% for project in candidate.projects %}
+                    <p><strong>{{ project.title }}</strong>{% if project.tech_stack %} &middot; {{ project.tech_stack }}{% endif %}</p>
+                    {% if project.description %}<p class="rb-muted">{{ project.description }}</p>{% endif %}
+                    {% else %}<p class="rb-muted">No projects available.</p>{% endfor %}
+                </div>
+            </div>
+
+            {# The heading is always shown, so it is clear the context exists
+               even when no report has been generated for this role yet. #}
+            <details class="rb-details">
+                <summary>Skill Gap Context</summary>
+                {% if skill_gap %}
+                <p class="rb-muted">
+                    {% if skill_gap.from_cache %}Using the saved Skill Gap report.{% else %}Skill Gap data is available for this role.{% endif %}
+                </p>
+                <p><strong>Already have:</strong>
+                    {% for skill in skill_gap.matched_skills %}{{ skill }}{% if not loop.last %}, {% endif %}{% else %}None reported{% endfor %}
+                </p>
+                <p><strong>Missing required:</strong>
+                    {% for skill in skill_gap.missing_required_skills %}{{ skill }}{% if not loop.last %}, {% endif %}{% else %}None reported{% endfor %}
+                </p>
+                <p><strong>Missing preferred:</strong>
+                    {% for skill in skill_gap.missing_preferred_skills %}{{ skill }}{% if not loop.last %}, {% endif %}{% else %}None reported{% endfor %}
+                </p>
+                <p class="rb-muted">Missing skills remain learning recommendations. They are not added to the profile automatically.</p>
+                {% else %}
+                <p class="rb-muted">No saved Skill Gap report is available for this role yet.</p>
+                {% endif %}
+            </details>
+        </section>
+    </main>
 </div>
-
-<div class="dash-card" style="margin-top:20px;">
-    <div class="dash-card-head"><h3>Skill Gap Context</h3></div>
-    {% if skill_gap %}
-    <p class="muted">{% if skill_gap.from_cache %}Using the saved Skill Gap report.{% else %}Skill Gap data is available for this role.{% endif %}</p>
-    <p><strong>Already have:</strong>
-        {% for skill in skill_gap.matched_skills %}{{ skill }}{% if not loop.last %}, {% endif %}{% else %}None reported{% endfor %}
-    </p>
-    <p><strong>Missing required:</strong>
-        {% for skill in skill_gap.missing_required_skills %}{{ skill }}{% if not loop.last %}, {% endif %}{% else %}None reported{% endfor %}
-    </p>
-    <p><strong>Missing preferred:</strong>
-        {% for skill in skill_gap.missing_preferred_skills %}{{ skill }}{% if not loop.last %}, {% endif %}{% else %}None reported{% endfor %}
-    </p>
-    <p class="muted">Missing skills remain learning recommendations. They are not added to the profile automatically.</p>
-    {% else %}
-    <p class="muted">No saved Skill Gap report is available for this role yet.</p>
-    {% endif %}
-</div>
-
-{% if result %}
-<div class="dash-card" style="margin-top:20px;" id="resume-result">
-    <div class="dash-card-head">
-        <h3>Tailored Resume Preview</h3>
-        <span class="status-badge {{ 'applied' if result.fact_check_status == 'passed' else 'under_review' }}">Fact check: {{ result.fact_check_status }}</span>
-    </div>
-    <p class="muted">
-        {% if result.from_cache %}Loaded saved version.{% else %}Newly generated version.{% endif %}
-        {% if result.used_fallback %} AI fallback used.{% endif %}
-    </p>
-
-    <label for="resume-editor"><strong>Editable Resume</strong></label>
-    <textarea id="resume-editor" name="resume_text" rows="28" readonly
-              style="width:100%;padding:14px;border:1px solid var(--border);border-radius:8px;line-height:1.6;font-family:Arial,sans-serif;">{{ result.resume_text or '' }}</textarea>
-    <p class="muted" style="margin-top:8px;">Edit Resume unlocks the text for manual changes. Saving stores the exact text you approve and does not call the AI.</p>
-
-    <div class="opportunity-actions" style="margin-top:14px;">
-        <button type="button" class="btn btn-outline" id="edit-resume">Edit Resume</button>
-        <button type="button" class="btn btn-outline" id="download-resume">Download Resume</button>
-    </div>
-
-    <form method="POST" action="{{ url_for('resume_builder.save') }}" id="save-resume-form" style="margin-top:14px;">
-        <input type="hidden" name="target_role" value="{{ selected_role }}">
-        <input type="hidden" name="template" value="{{ selected_template }}">
-        <input type="hidden" name="custom_instructions" id="save-custom-instructions" value="{{ custom_instructions or '' }}">
-        <input type="hidden" name="resume_text" id="save-resume-text" value="">
-        <button type="submit" class="btn btn-primary" id="save-resume">Save Resume</button>
-    </form>
-
-    {% if saved %}
-    <div class="flash-banner" style="margin-top:14px;background:var(--success-bg);color:var(--success);">
-        <p>Resume saved exactly as approved.</p>
-        {% if profile_updates.summary_updated %}<p>Approved summary copied to your profile.</p>{% endif %}
-        {% if profile_updates.skills_added %}<p>Added user-provided skills: {{ profile_updates.skills_added|join(', ') }}.</p>{% endif %}
-        {% if profile_updates.projects_added %}<p>Added user-provided projects: {{ profile_updates.projects_added|join(', ') }}.</p>{% endif %}
-        {% if profile_updates.experience_added %}<p>Added user-provided experience: {{ profile_updates.experience_added|join(', ') }}.</p>{% endif %}
-    </div>
-    {% endif %}
-
-    {% if result.user_updates and (result.user_updates.skills or result.user_updates.projects or result.user_updates.experience) %}
-    <p class="muted" style="margin-top:14px;">User-provided additions included in this draft: review them before saving.</p>
-    {% endif %}
-
-    {% if result.ai_suggestions and (result.ai_suggestions.professional_summary or result.ai_suggestions.experience or result.ai_suggestions.projects) %}
-    <h4 style="margin-top:20px;">AI Wording Suggestions — Review Only</h4>
-    <p class="muted">These suggestions are not treated as verified facts until reviewed by the user.</p>
-    {% if result.ai_suggestions.professional_summary %}<p><strong>Suggested summary:</strong> {{ result.ai_suggestions.professional_summary }}</p>{% endif %}
-    {% for suggestion in result.ai_suggestions.experience %}
-    <p><strong>{{ suggestion.title }}{% if suggestion.organization %} — {{ suggestion.organization }}{% endif %}</strong></p>
-    <ul>{% for bullet in suggestion.bullets %}<li>{{ bullet }}</li>{% endfor %}</ul>
-    {% endfor %}
-    {% for suggestion in result.ai_suggestions.projects %}
-    <p><strong>{{ suggestion.title }}</strong></p>
-    <ul>{% for bullet in suggestion.bullets %}<li>{{ bullet }}</li>{% endfor %}</ul>
-    {% endfor %}
-    {% endif %}
-
-    {% if result.flagged_claims %}
-    <h4 style="margin-top:20px;">Flagged/Unverified Claims</h4>
-    <ul>{% for claim in result.flagged_claims %}<li>{{ claim.claim }} — {{ claim.reason }}</li>{% endfor %}</ul>
-    {% endif %}
-
-    <form method="POST" action="{{ url_for('resume_builder.regenerate') }}" class="resume-regenerate-form" style="margin-top:18px;">
-        <input type="hidden" name="target_role" value="{{ selected_role }}">
-        <input type="hidden" name="template" value="{{ selected_template }}">
-        <input type="hidden" name="custom_instructions" value="{{ custom_instructions or '' }}">
-        <button type="submit" class="btn btn-outline">Regenerate with Fresh AI Pass</button>
-    </form>
-</div>
-{% else %}
-<div class="dash-card" style="margin-top:20px;">
-    <p class="muted">Choose a target role and generate a resume to begin. You will be able to edit and approve the final version before anything is saved.</p>
-</div>
-{% endif %}
 
 {% endblock %}
 
 {% block scripts %}
 <script>
+/* The whole editor works on one value: the document object the server rendered
+   into #document-json. Every edit mutates that object, then re-renders both the
+   editor fields and the live preview. Adding, removing and reordering a section
+   are array operations, so they need no server round trip and cannot drift out
+   of sync with what would be saved. */
 (function () {
-    const editor = document.getElementById('resume-editor');
-    const editButton = document.getElementById('edit-resume');
-    const saveForm = document.getElementById('save-resume-form');
-    const savedText = document.getElementById('save-resume-text');
-    const savedInstructions = document.getElementById('save-custom-instructions');
-    const instructionEditor = document.getElementById('custom-instructions');
-    const templateSelect = document.getElementById('resume-template');
-    let dirty = false;
+    'use strict';
 
-    // Keep the template hint in sync so the layout choice is easy to understand.
-    const templateDescriptions = {{ templates|tojson }};
-    if (templateSelect) {
-        const updateTemplateHint = () => {
-            const hint = templateSelect.parentElement.querySelector('p.muted');
-            const item = templateDescriptions[templateSelect.value];
-            if (hint && item) hint.textContent = item.description;
-        };
-        templateSelect.addEventListener('change', updateTemplateHint);
+    var stateNode = document.getElementById('document-json');
+    var preview = document.getElementById('resume-preview');
+    var panel = document.getElementById('resume-editor-panel');
+    var toggle = document.getElementById('toggle-editor');
+    var sectionHost = document.getElementById('section-editor');
+    if (!stateNode) return;
+
+    var document_ = JSON.parse(stateNode.textContent || '{}');
+    var candidate = {{ candidate | tojson }};
+    var role = {{ (selected_role or '') | tojson }};
+    var templateKey = {{ selected_template | tojson }};
+    var versionId = {{ (open_version.id if open_version else '') | tojson }};
+    var factCheck = {{ (result.fact_check_status if result and result.fact_check_status else '') | tojson }};
+    var versionsUrl = {{ url_for('resume_builder.view') | tojson }};
+
+    var toast = window.showToast || function () {};
+    var dirty = false;
+
+    /* ---------------------------------------------------------------- utils */
+
+    function el(tag, className, text) {
+        var node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined && text !== null) node.textContent = text;
+        return node;
     }
 
-    if (editor) {
-        savedText.value = editor.value;
-        editButton.addEventListener('click', () => {
-            editor.readOnly = !editor.readOnly;
-            editButton.textContent = editor.readOnly ? 'Edit Resume' : 'Editing Enabled';
-            if (!editor.readOnly) editor.focus();
-        });
-        editor.addEventListener('input', () => {
-            dirty = true;
-            savedText.value = editor.value;
+    function markDirty() { dirty = true; }
+
+    function sectionByKey(key) {
+        for (var i = 0; i < document_.sections.length; i++) {
+            if (document_.sections[i].key === key) return i;
+        }
+        return -1;
+    }
+
+    /* ------------------------------------------------------------- preview */
+
+    /* Renders the same shapes the server's render_html() produces. It is a
+       client-side mirror rather than a second source of truth: the authoritative
+       output for saving and downloading is the JSON in #document-json, and the
+       server re-renders it for the PDF and TXT. */
+    function renderPreview() {
+        if (!preview) return;
+        var esc = function (value) {
+            return String(value === undefined || value === null ? '' : value)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        };
+        var head = '<h1 class="resume-doc__name">' + esc(document_.name) + '</h1>';
+        if (document_.contact && document_.contact.length) {
+            head += '<p class="resume-doc__contact">' + document_.contact.map(esc).join(' &nbsp;|&nbsp; ') + '</p>';
+        }
+        if (document_.headline) {
+            head += '<p class="resume-doc__headline">' + esc(document_.headline) + '</p>';
+        }
+
+        var body = '';
+        (document_.sections || []).forEach(function (section) {
+            body += '<h2 class="resume-doc__heading">' + esc(section.title) + '</h2>';
+            if (section.kind === 'text') {
+                body += '<p class="resume-doc__para">' + esc(section.text) + '</p>';
+            } else if (section.kind === 'skill_groups') {
+                body += '<div class="resume-doc__skills">';
+                (section.groups || []).forEach(function (group) {
+                    var label = group.label
+                        ? '<span class="resume-doc__skill-label">' + esc(group.label) + '</span>' : '';
+                    body += '<div class="resume-doc__skill-row">' + label +
+                        '<span class="resume-doc__skill-values">' +
+                        (group.skills || []).map(esc).join(', ') + '</span></div>';
+                });
+                body += '</div>';
+            } else if (section.kind === 'entries') {
+                body += '<div class="resume-doc__entries">';
+                (section.entries || []).forEach(function (entry) {
+                    var left = [entry.title, entry.organization].filter(Boolean).join(' - ');
+                    var right = [entry.start_date, entry.end_date].filter(Boolean).join(' - ');
+                    if (entry.tech_stack) right = entry.tech_stack + (right ? ' | ' + right : '');
+                    var headlineText = left && right ? left + ' | ' + right : (left || right);
+                    if (headlineText) body += '<p class="resume-doc__entry-head">' + esc(headlineText) + '</p>';
+                    if (entry.detail) body += '<p class="resume-doc__entry-detail">' + esc(entry.detail) + '</p>';
+                    if ((entry.bullets || []).length) {
+                        body += '<ul>' + entry.bullets.map(function (b) {
+                            return '<li>' + esc(b) + '</li>';
+                        }).join('') + '</ul>';
+                    }
+                });
+                body += '</div>';
+            } else if (section.kind === 'list') {
+                body += '<ul class="resume-doc__bullets">' + (section.items || []).map(function (i) {
+                    return '<li>' + esc(i) + '</li>';
+                }).join('') + '</ul>';
+            }
         });
 
-        // Download the exact text currently shown, so the file always matches
-        // the preview and any manual edits.
-        const downloadButton = document.getElementById('download-resume');
-        if (downloadButton) {
-            downloadButton.addEventListener('click', () => {
-                const role = (document.getElementById('target-role') || {}).value || 'resume';
-                const safeRole = role.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-                const blob = new Blob([editor.value], { type: 'text/plain;charset=utf-8' });
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = (safeRole || 'resume') + '-resume.txt';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
+        preview.innerHTML = '<article class="resume-doc">' + head + body + '</article>';
+    }
+
+    /* -------------------------------------------------------------- editor */
+
+    function textarea(value, rows, placeholder, oninput) {
+        var node = document.createElement('textarea');
+        node.className = 'rb-input rb-input--area';
+        node.rows = rows || 3;
+        node.placeholder = placeholder || '';
+        node.value = value || '';
+        node.addEventListener('input', function () { oninput(node.value); });
+        return node;
+    }
+
+    function input(value, placeholder, oninput) {
+        var node = document.createElement('input');
+        node.type = 'text';
+        node.className = 'rb-input rb-input--sm';
+        node.placeholder = placeholder || '';
+        node.value = value || '';
+        node.addEventListener('input', function () { oninput(node.value); });
+        return node;
+    }
+
+    function labelled(text, control) {
+        var wrap = el('div', 'rb-field');
+        wrap.appendChild(el('span', 'rb-field__label', text));
+        wrap.appendChild(control);
+        return wrap;
+    }
+
+    function buildEntryEditor(section, entryIndex, entry) {
+        var box = el('div', 'rb-entry');
+
+        // Per-entry removal, so an individual project or role can be dropped
+        // from this resume without deleting the whole section or the record in
+        // the candidate's profile.
+        var drop = el('button', 'rb-entry__remove', 'Remove');
+        drop.type = 'button';
+        drop.title = 'Remove this ' + section.title.replace(/s$/, '').toLowerCase() + ' from this resume';
+        drop.addEventListener('click', function () {
+            section.entries.splice(entryIndex, 1);
+            markDirty(); renderEditor(); renderPreview();
+        });
+        box.appendChild(drop);
+
+        var grid = el('div', 'rb-entry__grid');
+        grid.appendChild(labelled('Title', input(entry.title, 'Data Analyst Intern', function (v) {
+            entry.title = v; markDirty(); renderPreview();
+        })));
+        grid.appendChild(labelled(section.key === 'projects' ? 'Tech stack' : 'Organisation', input(
+            section.key === 'projects' ? entry.tech_stack : entry.organization,
+            section.key === 'projects' ? 'Python, FAISS' : 'Company name',
+            function (v) {
+                if (section.key === 'projects') entry.tech_stack = v; else entry.organization = v;
+                markDirty(); renderPreview();
+            })));
+        grid.appendChild(labelled('Start', input(entry.start_date, '2025-06', function (v) {
+            entry.start_date = v; markDirty(); renderPreview();
+        })));
+        grid.appendChild(labelled('End', input(entry.end_date, '2025-08', function (v) {
+            entry.end_date = v; markDirty(); renderPreview();
+        })));
+        box.appendChild(grid);
+        if (section.key === 'education') {
+            box.appendChild(labelled('Extra detail (e.g. CGPA)', input(entry.detail, 'CGPA: 8.66', function (v) {
+                entry.detail = v; markDirty(); renderPreview();
+            })));
+        }
+        box.appendChild(labelled('Bullet points (one per line)', textarea(
+            (entry.bullets || []).join('\n'), 4,
+            'Built Power BI dashboards for the reporting team.',
+            function (v) {
+                entry.bullets = v.split('\n').map(function (line) { return line.trim(); })
+                    .filter(Boolean);
+                markDirty(); renderPreview();
+            })));
+        return box;
+    }
+
+    function renderEditor() {
+        if (!sectionHost) return;
+        sectionHost.innerHTML = '';
+
+        (document_.sections || []).forEach(function (section, index) {
+            var card = el('section', 'rb-section-card');
+            card.dataset.key = section.key;
+
+            var head = el('div', 'rb-section-card__head');
+            var titleInput = input(section.title, 'Section title', function (v) {
+                section.title = v; markDirty(); renderPreview();
             });
+            titleInput.className = 'rb-input rb-input--title';
+            head.appendChild(titleInput);
+
+            var controls = el('div', 'rb-section-card__controls');
+            var moveUp = el('button', 'rb-icon-btn', '\u2191');
+            moveUp.type = 'button';
+            moveUp.title = 'Move up';
+            moveUp.disabled = index === 0;
+            moveUp.addEventListener('click', function () {
+                if (index === 0) return;
+                var sections = document_.sections;
+                var tmp = sections[index - 1];
+                sections[index - 1] = sections[index];
+                sections[index] = tmp;
+                markDirty(); renderEditor(); renderPreview();
+            });
+
+            var moveDown = el('button', 'rb-icon-btn', '\u2193');
+            moveDown.type = 'button';
+            moveDown.title = 'Move down';
+            moveDown.disabled = index === document_.sections.length - 1;
+            moveDown.addEventListener('click', function () {
+                if (index >= document_.sections.length - 1) return;
+                var sections = document_.sections;
+                var tmp = sections[index + 1];
+                sections[index + 1] = sections[index];
+                sections[index] = tmp;
+                markDirty(); renderEditor(); renderPreview();
+            });
+
+            var remove = el('button', 'rb-icon-btn rb-icon-btn--danger', '\u2715');
+            remove.type = 'button';
+            remove.title = 'Remove this section';
+            remove.addEventListener('click', function () {
+                document_.sections.splice(index, 1);
+                markDirty(); renderEditor(); renderPreview();
+            });
+
+            controls.appendChild(moveUp);
+            controls.appendChild(moveDown);
+            controls.appendChild(remove);
+            head.appendChild(controls);
+            card.appendChild(head);
+
+            if (section.kind === 'text') {
+                card.appendChild(textarea(section.text, 4, 'Professional summary', function (v) {
+                    section.text = v; markDirty(); renderPreview();
+                }));
+            } else if (section.kind === 'skill_groups') {
+                (section.groups || []).forEach(function (group, groupIndex) {
+                    var groupBox = el('div', 'rb-entry');
+                    var dropGroup = el('button', 'rb-entry__remove', 'Remove category');
+                    dropGroup.type = 'button';
+                    dropGroup.addEventListener('click', function () {
+                        section.groups.splice(groupIndex, 1);
+                        markDirty(); renderEditor(); renderPreview();
+                    });
+                    groupBox.appendChild(dropGroup);
+                    groupBox.appendChild(labelled('Category', input(group.label, 'Languages', function (v) {
+                        group.label = v; markDirty(); renderPreview();
+                    })));
+                    groupBox.appendChild(labelled('Skills (one per line)', textarea(
+                        (group.skills || []).join('\n'), 3, 'Python\nSQL',
+                        function (v) {
+                            group.skills = v.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+                            markDirty(); renderPreview();
+                        })));
+                    card.appendChild(groupBox);
+                });
+                var addGroup = el('button', 'ai-btn ai-btn--quiet', '+ Skill category');
+                addGroup.type = 'button';
+                addGroup.addEventListener('click', function () {
+                    section.groups = section.groups || [];
+                    section.groups.push({ label: '', skills: [] });
+                    markDirty(); renderEditor();
+                });
+                card.appendChild(addGroup);
+            } else if (section.kind === 'entries') {
+                (section.entries || []).forEach(function (entry, entryIndex) {
+                    card.appendChild(buildEntryEditor(section, entryIndex, entry));
+                });
+                var addEntry = el('button', 'ai-btn ai-btn--quiet', '+ ' + section.title.replace(/s$/, ''));
+                addEntry.type = 'button';
+                addEntry.addEventListener('click', function () {
+                    section.entries = section.entries || [];
+                    section.entries.push({
+                        title: '', organization: '', start_date: '', end_date: '',
+                        detail: '', tech_stack: '', bullets: []
+                    });
+                    markDirty(); renderEditor(); renderPreview();
+                });
+                card.appendChild(addEntry);
+            } else if (section.kind === 'list') {
+                card.appendChild(textarea((section.items || []).join('\n'), 4,
+                    'One certification per line',
+                    function (v) {
+                        section.items = v.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+                        markDirty(); renderPreview();
+                    }));
+            }
+
+            sectionHost.appendChild(card);
+        });
+
+        var adders = document.querySelectorAll('[data-add-section]');
+        Array.prototype.forEach.call(adders, function (button) {
+            button.addEventListener('click', function () {
+                var key = button.getAttribute('data-add-section');
+                if (sectionByKey(key) !== -1) {
+                    toast('That section is already in this resume.', 'error');
+                    return;
+                }
+                var blank = {
+                    professional_summary: { title: 'Professional Summary', kind: 'text', text: '' },
+                    skills: { title: 'Technical Skills', kind: 'skill_groups', groups: [{ label: '', skills: [] }] },
+                    experience: { title: 'Experience', kind: 'entries', entries: [] },
+                    projects: { title: 'Projects', kind: 'entries', entries: [] },
+                    education: { title: 'Education', kind: 'entries', entries: [] },
+                    certifications: { title: 'Certifications', kind: 'list', items: [] }
+                }[key];
+                if (!blank) return;
+                document_.sections.push(blank);
+                markDirty(); renderEditor(); renderPreview();
+            });
+        });
+    }
+
+    /* ------------------------------------------------------------- actions */
+
+    function busy(show, text) {
+        var node = document.getElementById('action-busy');
+        if (!node) return;
+        node.hidden = !show;
+        if (text) {
+            var label = document.getElementById('action-busy-text');
+            if (label) label.textContent = text;
         }
     }
 
-    if (saveForm) {
-        saveForm.addEventListener('submit', event => {
-            if (!editor.value.trim()) {
-                event.preventDefault();
-                return;
-            }
-            savedText.value = editor.value;
-            savedInstructions.value = instructionEditor ? instructionEditor.value : savedInstructions.value;
-            dirty = false;
+    function post(url, extra) {
+        var body = new URLSearchParams();
+        body.set('sections', JSON.stringify(document_));
+        body.set('target_role', role || document_.headline || '');
+        // Read the template from the live control rather than the value the
+        // server rendered, so saving after changing the picker records the
+        // template the user actually has selected.
+        var templatePicker = document.getElementById('resume-template');
+        body.set('template', (templatePicker && templatePicker.value) || templateKey);
+        if (versionId) body.set('version_id', versionId);
+        if (factCheck) body.set('fact_check_status', factCheck);
+        var instructions = document.getElementById('custom-instructions');
+        if (instructions) body.set('custom_instructions', instructions.value);
+        Object.keys(extra || {}).forEach(function (key) {
+            if (extra[key] !== undefined && extra[key] !== null) body.set(key, extra[key]);
+        });
+        return fetch(url, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                'Accept': 'application/json',
+                'X-Requested-With': 'fetch'
+            },
+            body: body.toString()
         });
     }
 
-    document.querySelectorAll('.resume-generation-form, .resume-regenerate-form, .resume-load-form').forEach(form => {
-        form.addEventListener('submit', event => {
-            if (dirty && !window.confirm('This will replace the current editor text. Continue?')) {
-                event.preventDefault();
-            }
+    var saveButton = document.getElementById('save-resume');
+    if (saveButton) {
+        saveButton.addEventListener('click', function () {
+            busy(true, 'Saving your resume\u2026');
+            post({{ url_for('resume_builder.save_version') | tojson }}, {})
+                .then(function (response) {
+                    // A non-JSON body here means the request never reached the
+                    // JSON branch of the route. Report that plainly instead of
+                    // surfacing a raw parser error.
+                    var type = response.headers.get('Content-Type') || '';
+                    if (type.indexOf('json') === -1) {
+                        throw new Error('The server did not return a save result. Please try again.');
+                    }
+                    return response.json().then(function (data) {
+                        return { ok: response.ok, data: data };
+                    });
+                })
+                .then(function (result) {
+                    busy(false);
+                    if (!result.ok) {
+                        toast(result.data.error || 'The resume could not be saved.', 'error');
+                        return;
+                    }
+                    versionId = result.data.version_id;
+                    dirty = false;
+                    toast('Saved as "' + result.data.title + '".', 'success');
+                })
+                .catch(function (error) {
+                    busy(false);
+                    toast(error.message || 'The resume could not be saved.', 'error');
+                });
         });
-    });
+    }
 
-    window.addEventListener('beforeunload', event => {
+    function download(kind) {
+        busy(true, 'Building your ' + kind.toUpperCase() + '\u2026');
+        post({{ url_for('resume_builder.download_pdf') | tojson }}, { format: kind })
+            .then(function (response) {
+                var type = response.headers.get('Content-Type') || '';
+                if (!response.ok || type.indexOf('json') !== -1) {
+                    return response.json().then(function (data) { throw new Error(data.error || 'Download failed.'); });
+                }
+                return response.blob().then(function (blob) {
+                    var disposition = response.headers.get('Content-Disposition') || '';
+                    var match = disposition.match(/filename="?([^"]+)"?/);
+                    var url = URL.createObjectURL(blob);
+                    var link = document.createElement('a');
+                    link.href = url;
+                    link.download = match ? match[1] : 'resume.' + kind;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                });
+            })
+            .then(function () { busy(false); })
+            .catch(function (error) {
+                busy(false);
+                toast(error.message || 'The download failed.', 'error');
+            });
+    }
+
+    var pdfButton = document.getElementById('download-pdf');
+    if (pdfButton) pdfButton.addEventListener('click', function () { download('pdf'); });
+
+    var txtButton = document.getElementById('download-txt');
+    if (txtButton) txtButton.addEventListener('click', function () { download('txt'); });
+
+    if (toggle && panel) {
+        toggle.addEventListener('click', function () {
+            var open = panel.hidden;
+            panel.hidden = !open;
+            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            toggle.textContent = open ? 'Done editing' : 'Edit';
+            if (open) renderEditor();
+        });
+    }
+
+    /* Warn before navigating away from unsaved edits. */
+    window.addEventListener('beforeunload', function (event) {
         if (!dirty) return;
         event.preventDefault();
         event.returnValue = '';
     });
+
+    /* Exposed for verification; harmless in normal use. */
+    window.resumeBuilder = {
+        get document() { return document_; },
+        setBusy: busy,
+        post: post
+    };
 }());
 </script>
 {% endblock %}

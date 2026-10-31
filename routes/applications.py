@@ -6,10 +6,14 @@ Save/Apply buttons on the Opportunities page POST here via fetch().
 import pymysql
 from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
 
+import logging
+
 from database.db import get_db
+from services.notification_service import notify_application
 
 
 applications_bp = Blueprint("applications", __name__, url_prefix="/applications")
+logger = logging.getLogger(__name__)
 
 VALID_STATUSES = {"saved", "applied", "interview", "under_review", "rejected"}
 
@@ -53,12 +57,104 @@ def _job_exists(cursor, job_id: int) -> bool:
     return cursor.fetchone() is not None
 
 
+def _ensure_job_row(cursor, job_id: int) -> bool:
+    """Make sure a job this user is tracking has a `jobs` row to reference.
+
+    The local dataset stays exactly as it is. A live Adzuna job is only written
+    here when the user explicitly saves or applies to it -- never in bulk, and
+    never to make browsing work. The id lives in the reserved Adzuna range, so
+    it can never collide with the 185 canonical rows, and the loader's
+    verification only inspects CSV ids, so the dataset check is unaffected.
+    """
+    if _job_exists(cursor, job_id):
+        return True
+
+    try:
+        from services import adzuna_service, live_job_store
+    except Exception:
+        return False
+
+    if not adzuna_service.is_adzuna_job_id(job_id):
+        return False
+
+    job = live_job_store.get(job_id)
+    if not job:
+        return False
+
+    cursor.execute(
+        """
+        INSERT INTO jobs
+            (job_id, title, company, location, job_type, domain, description,
+             responsibilities, required_skills, preferred_skills, qualifications,
+             experience_required, education_required, stipend_or_salary, apply_link)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE
+            title=VALUES(title), company=VALUES(company), location=VALUES(location),
+            description=VALUES(description), apply_link=VALUES(apply_link)
+        """,
+        (
+            int(job_id),
+            job.get("title") or "",
+            job.get("company") or "",
+            job.get("location") or "",
+            job.get("job_type") or "",
+            job.get("domain") or "",
+            job.get("description") or "",
+            job.get("responsibilities") or "",
+            job.get("required_skills") or "",
+            job.get("preferred_skills") or "",
+            job.get("qualifications") or "",
+            job.get("experience_required") or "",
+            job.get("education_required") or "",
+            job.get("stipend_or_salary") or "",
+            job.get("apply_link") or "",
+        ),
+    )
+    return True
+
+
 def _preservation_message(action: str, actual_status: str) -> str | None:
     expected = "saved" if action == "save" else "applied"
     if actual_status == expected:
         return None
     label = actual_status.replace("_", " ")
     return f"Existing application status '{label}' was preserved."
+
+
+# MySQL error codes seen when a tracking row cannot be written. Mapped to the
+# cause that actually applies, so the message describes the user's problem
+# instead of a generic one. 1452 is a foreign-key violation, 1062 a duplicate.
+_FK_ERROR = 1452
+_DUPLICATE_ERROR = 1062
+
+_FK_COLUMN_HINTS = (
+    ("applications_ibfk_1", "your sign-in session refers to an account that no longer exists"),
+    ("applications_ibfk_2", "this job listing is no longer available, so it can no longer be tracked"),
+    ("fk_applications_resume_id", "the resume linked to this application is no longer available"),
+)
+
+_ERROR_STATUS = {
+    _FK_ERROR: 409,
+    _DUPLICATE_ERROR: 409,
+}
+
+
+def _tracking_error_detail(exc) -> str:
+    """Explain an IntegrityError using the constraint it actually came from."""
+    code = exc.args[0] if exc.args else None
+    text = str(exc.args[1]) if len(exc.args) > 1 else str(exc)
+
+    for constraint, reason in _FK_COLUMN_HINTS:
+        if constraint in text:
+            return f"This application could not be saved because {reason}."
+
+    if code == _FK_ERROR:
+        return "This application could not be saved because a linked record is no longer valid."
+    if code == _DUPLICATE_ERROR:
+        return "This application is already recorded for this job."
+
+    # Unknown code: say what happened without inventing a cause.
+    return "This application could not be saved due to a database constraint."
 
 
 def _track_application(job_id: int, action: str):
@@ -72,9 +168,9 @@ def _track_application(job_id: int, action: str):
 
     try:
         with db.cursor() as cursor:
-            if not _job_exists(cursor, job_id):
+            if not _ensure_job_row(cursor, job_id):
                 return jsonify({
-                    "error": f"Job {job_id} does not exist in MySQL. Run the canonical job synchronization step."
+                    "error": f"Job {job_id} could not be found. Live listings can only be tracked while they are still open on the job board."
                 }), 404
 
             resume_id = _get_current_resume_id(cursor, user_id)
@@ -116,13 +212,24 @@ def _track_application(job_id: int, action: str):
             application = cursor.fetchone()
 
         db.commit()
-    except pymysql.err.IntegrityError:
+    except pymysql.err.IntegrityError as exc:
         db.rollback()
+        code = exc.args[0] if exc.args else None
+        logger.warning(
+            "Application %s for job %s refused: %s", action, job_id, exc
+        )
         return jsonify({
-            "error": "The application could not be saved because its job or resume is no longer valid."
-        }), 409
+            "error": _tracking_error_detail(exc),
+            "code": "tracking_failed",
+        }), _ERROR_STATUS.get(code, 409)
 
     actual_status = application["status"]
+
+    # Restate the status the user just produced. Dedupe is per (job, status),
+    # so a repeated Apply on an already-applied job adds nothing new.
+    if created:
+        notify_application(db, user_id, job_id, actual_status)
+
     payload = {
         "job_id": job_id,
         "status": actual_status,

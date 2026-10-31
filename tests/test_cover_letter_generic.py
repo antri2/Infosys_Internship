@@ -102,9 +102,13 @@ def test_cover_letter_keeps_role_level_selector_without_exposing_job_ids(client)
     assert b"Job ID" not in response.data
 
 
-def test_role_level_cover_letter_resolves_a_representative_job(
-    app, client, monkeypatch
-):
+def test_role_level_cover_letter_uses_no_job_and_no_company(app, client, monkeypatch):
+    """A role on its own must never pull a company out of the dataset.
+
+    Previously a bare role resolved a "representative" posting from the 185-job
+    dataset, so the letter claimed to be addressed to that employer even though
+    the user never supplied one.
+    """
     captured = {}
 
     def broken_generate(prompt, **kwargs):
@@ -119,7 +123,37 @@ def test_role_level_cover_letter_resolves_a_representative_job(
 
     assert response.status_code == 200
     payload = response.get_json()
-    assert payload["job_id"] is not None
-    assert payload["job"]["title"]
-    assert payload["job"]["title"] in captured["prompt"]
-    assert payload["job"]["title"] in payload["cover_letter"]
+
+    # No job is attached, so no employer or posting can leak into the prompt.
+    assert payload["job_id"] is None
+    assert payload["job"] is None
+    assert "GENERAL ROLE MODE" in captured["prompt"]
+    # The prompt must not carry an employer from the dataset.
+    with app.app_context():
+        db = get_db()
+        with db.cursor() as cursor:
+            cursor.execute("SELECT DISTINCT company FROM jobs")
+            dataset_companies = [
+                row["company"] for row in cursor.fetchall() if row["company"]
+            ]
+    assert not [name for name in dataset_companies if name in captured["prompt"]]
+
+    # Every dataset company must be absent from the generated letter.
+    letter = payload["cover_letter"].casefold()
+    with app.app_context():
+        db = get_db()
+        with db.cursor() as cursor:
+            cursor.execute("SELECT DISTINCT company FROM jobs")
+            companies = [row["company"] for row in cursor.fetchall()]
+    leaked = [name for name in companies if name and name.casefold() in letter]
+    assert leaked == [], f"dataset companies leaked into a role-only letter: {leaked}"
+
+
+def test_role_only_page_does_not_attach_a_representative_job(client):
+    """Opening the page with only a role must not pre-select an opportunity."""
+    response = client.get("/cover-letter/?target_role=AI%20Engineer")
+
+    assert response.status_code == 200
+    assert b'value="AI Engineer"' in response.data
+    # No job id is associated, so the next generate cannot reuse one.
+    assert b"associatedJobId = '" not in response.data or b"associatedJobId = ''" in response.data

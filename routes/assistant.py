@@ -77,11 +77,19 @@ def view():
         error = "Your conversation could not be loaded right now."
 
     context = session_data.get("context") or {}
+    try:
+        conversations = AgentOrchestrator(
+            db, session["user_id"]
+        ).list_career_conversations()
+    except Exception:
+        logger.exception("Could not list Career Assistant conversations")
+        conversations = []
     return render_template(
         "assistant.html",
         active_page="assistant",
         messages=session_data.get("messages", []),
         session_id=session_data.get("session_id"),
+        conversations=conversations,
         selected_job_id=context.get("job_id") or request.args.get("job_id", type=int),
         target_role=context.get("target_role", "") or request.args.get("target_role", ""),
         pasted_jd=context.get("pasted_jd", "") or request.args.get("pasted_jd", ""),
@@ -163,3 +171,56 @@ def reset():
         logger.exception("Could not reset Career Assistant conversation")
         return _error("A new conversation could not be started.", 503)
     return jsonify({"success": True, **result})
+
+
+@assistant_bp.route("/conversations", methods=["GET"])
+def conversations():
+    """Every stored conversation for this user, for the sidebar list."""
+    if not _require_login():
+        return _error("Not logged in.", 401)
+    try:
+        items = AgentOrchestrator(
+            get_db(), session["user_id"]
+        ).list_career_conversations()
+    except Exception:
+        logger.exception("Could not list Career Assistant conversations")
+        return _error("Conversations could not be loaded.", 503)
+    return jsonify({"success": True, "conversations": items})
+
+
+@assistant_bp.route("/conversations/<int:session_id>/title", methods=["POST"])
+def rename_conversation(session_id: int):
+    if not _require_login():
+        return _error("Not logged in.", 401)
+    payload = _payload()
+    title = " ".join(str(payload.get("title", "")).split())[:80]
+    if not title:
+        return _error("A conversation title is required.", 400)
+    try:
+        changed = AgentOrchestrator(
+            get_db(), session["user_id"]
+        ).rename_career_conversation(session_id, title)
+    except Exception:
+        logger.exception("Could not rename Career Assistant conversation")
+        return _error("The conversation could not be renamed.", 503)
+    if not changed:
+        # Ownership is enforced in SQL, so this is also what a conversation
+        # belonging to another user returns.
+        return _error("The conversation was not found.", 404)
+    return jsonify({"success": True, "title": title})
+
+
+@assistant_bp.route("/conversations/<int:session_id>", methods=["DELETE", "POST"])
+def delete_conversation(session_id: int):
+    if not _require_login():
+        return _error("Not logged in.", 401)
+    try:
+        deleted = AgentOrchestrator(
+            get_db(), session["user_id"]
+        ).delete_career_conversation(session_id)
+    except Exception:
+        logger.exception("Could not delete Career Assistant conversation")
+        return _error("The conversation could not be deleted.", 503)
+    if not deleted:
+        return _error("The conversation was not found.", 404)
+    return jsonify({"success": True})

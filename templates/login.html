@@ -1,30 +1,101 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "partials/brand.html" import brand_mark %}
+{% block surface_styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
+{% endblock %}
 {% block title %}Login - CareerAI{% endblock %}
+{% block body_class %}surface{% endblock %}
+{% block backdrop %}{% include "partials/neural.html" %}{% endblock %}
 {% block content %}
 
-<nav class="navbar">
-    <a href="{{ url_for('landing') }}" class="logo">&#127891; CareerAI</a>
-</nav>
+<div class="sc-shell">
+    <header class="sc-nav">
+        <div class="sc-container sc-nav__inner">
+            <a href="{{ url_for('landing') }}" class="sc-brand">
+                {{ brand_mark() }}
+                <span>CareerAI</span>
+            </a>
+            <div class="sc-nav__actions">
+                <a href="{{ url_for('auth.register') }}" class="sc-btn sc-btn--primary">Register</a>
+            </div>
+        </div>
+    </header>
 
-<div class="auth-page">
-    <div class="auth-card">
-        <h1>Welcome Back</h1>
-        <p class="auth-sub">Login to continue your career journey.</p>
+    <main class="sc-auth">
+        <div class="sc-auth__grid">
 
-        <form method="POST" action="{{ url_for('auth.login') }}">
-            <label for="email">Email</label>
-            <input type="email" id="email" name="email" required autocomplete="email">
+            {# Explanatory column. Hidden from assistive tech would hide useful
+               context, so it stays readable markup rather than an image. #}
+            <aside class="sc-auth__aside">
+                <h2>Welcome back to your career workspace</h2>
+                <p>
+                    Your profile, tailored resumes, saved cover letters, applications
+                    and interview history are all waiting exactly where you left them.
+                </p>
+                <ul class="sc-auth__points">
+                    <li>{{ icon('briefcase') }} Opportunities ranked against your verified skills</li>
+                    <li>{{ icon('file-text') }} Every generated document checked for unsupported claims</li>
+                    <li>{{ icon('mic') }} Mock interview feedback grounded in your own answer</li>
+                    <li>{{ icon('message-circle') }} A Career Assistant that only speaks from your profile</li>
+                </ul>
+            </aside>
 
-            <label for="password">Password</label>
-            <input type="password" id="password" name="password" required autocomplete="current-password">
+            <div class="sc-auth__card">
+                <a href="{{ url_for('landing') }}" class="sc-auth__brand">
+                    {{ brand_mark() }}
+                    <span>CareerAI</span>
+                </a>
 
-            <p class="forgot-link"><a href="{{ url_for('auth.forgot_password') }}">Forgot Password?</a></p>
+                <h1 class="sc-auth__title">Welcome Back</h1>
+                <p class="sc-auth__sub">Sign in to continue your career journey.</p>
 
-            <button type="submit" class="btn btn-primary btn-block">Login</button>
-        </form>
+                <form method="POST" action="{{ url_for('auth.login') }}" novalidate data-auth-form>
+                    <div class="sc-field">
+                        <label class="sc-field__label" for="email">Email address</label>
+                        <input type="email" id="email" name="email" required
+                               autocomplete="email" placeholder="you@example.com"
+                               inputmode="email">
+                        <p class="sc-field__error" id="email-error" role="alert"></p>
+                    </div>
 
-        <p class="auth-switch">New to CareerAI? <a href="{{ url_for('auth.register') }}">Register</a></p>
-    </div>
+                    <div class="sc-field sc-field--password">
+                        <label class="sc-field__label" for="password">Password</label>
+                        <div class="sc-field__control">
+                            <input type="password" id="password" name="password" required
+                                   autocomplete="current-password" placeholder="Your password"
+                                   data-toggle-for="password">
+                            <button type="button" class="sc-field__toggle"
+                                    data-password-toggle="password"
+                                    aria-label="Show password" aria-pressed="false">
+                                {{ icon('eye') }}
+                            </button>
+                        </div>
+                        <p class="sc-field__error" id="password-error" role="alert"></p>
+                    </div>
+
+                    <div class="sc-form-row">
+                        <span class="sc-field__hint" style="margin:0;">
+                            Sessions are per browser. Use Logout in the sidebar when you're done.
+                        </span>
+                        <a href="{{ url_for('auth.forgot_password') }}" class="sc-link">Forgot password?</a>
+                    </div>
+
+                    <button type="submit" class="sc-btn sc-btn--primary sc-btn--lg sc-btn--block">
+                        Login
+                    </button>
+                </form>
+
+                <p class="sc-alt">
+                    New to CareerAI? <a href="{{ url_for('auth.register') }}" class="sc-link">Create an account</a>
+                </p>
+            </div>
+        </div>
+    </main>
 </div>
 
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/auth_forms.js') }}"></script>
 {% endblock %}

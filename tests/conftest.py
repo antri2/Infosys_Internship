@@ -17,6 +17,13 @@ if not re.fullmatch(r"career_ai_[A-Za-z0-9_]+", TEST_DATABASE):
 # precedence over values from .env when python-dotenv is called.
 os.environ["MYSQL_DATABASE"] = TEST_DATABASE
 
+# Keep the suite hermetic and offline. A developer machine usually has real
+# Adzuna credentials in .env, and without this the tests would silently make
+# live network calls and assert against whatever Adzuna happened to return.
+# Tests that exercise the live path stub the transport and credentials
+# themselves (see tests/test_adzuna_service.py), so they still run in full.
+os.environ["ADZUNA_ENABLED"] = "false"
+
 from Data.Loads_jobs_to_dataset import read_clean_jobs, sync_jobs, verify_jobs  # noqa: E402
 from app import create_app  # noqa: E402
 from database import db  # noqa: E402

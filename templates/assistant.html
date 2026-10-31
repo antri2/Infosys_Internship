@@ -1,91 +1,133 @@
 {% extends "app_shell.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Career Assistant - CareerAI{% endblock %}
 {% block app_content %}
 
 <div class="assistant-page">
-    <header class="assistant-header">
-        <div class="assistant-heading">
-            <div class="assistant-mark" aria-hidden="true">✦</div>
-            <div>
-                <p class="assistant-eyebrow">Your career workspace</p>
-                <h1>Career Assistant</h1>
-                <p class="assistant-subtitle">Ask about your verified profile, target roles, skills, resume, and interview preparation.</p>
-            </div>
-        </div>
-        <button type="button" class="btn btn-outline assistant-new-chat" id="assistant-reset">New Chat</button>
-    </header>
 
-    <div class="assistant-context-bar" id="assistant-context-bar">
-        <span class="assistant-context-dot" aria-hidden="true"></span>
-        <span id="assistant-context-indicator">
-            {% if selected_job_id %}
-                Selected synchronized job context is active.
-            {% elif pasted_jd %}
-                Pasted job description context is active.
-            {% elif target_role %}
-                Target role: {{ target_role }}.
-            {% else %}
-                No selected job is active; I can still give profile-based general guidance.
-            {% endif %}
-        </span>
+    {# Conversation list. Rendered server-side from MySQL and refreshed by the
+       same JS that posts messages, so history is never browser-memory only. #}
+    <aside class="assistant-sidebar" id="assistant-sidebar" aria-label="Conversation history">
+        <button type="button" class="btn btn-primary assistant-new-chat" id="assistant-reset">
+            <span aria-hidden="true">+</span> New Chat
+        </button>
+
+        <div class="assistant-conversations" id="assistant-conversations">
+            {% for item in conversations %}
+            <div class="assistant-conversation{% if item.id == session_id %} is-active{% endif %}"
+                 data-session-id="{{ item.id }}">
+                <button type="button" class="assistant-conversation-open" data-session-id="{{ item.id }}"
+                        title="{{ item.title }}">
+                    <span class="assistant-conversation-title">{{ item.title }}</span>
+                    <span class="assistant-conversation-meta">{{ item.message_count }} message{{ '' if item.message_count == 1 else 's' }}</span>
+                </button>
+                <div class="assistant-conversation-actions">
+                    <button type="button" class="assistant-conversation-rename" data-session-id="{{ item.id }}"
+                            aria-label="Rename {{ item.title }}">Rename</button>
+                    <button type="button" class="assistant-conversation-delete" data-session-id="{{ item.id }}"
+                            aria-label="Delete {{ item.title }}">Delete</button>
+                </div>
+            </div>
+            {% endfor %}
+            <p class="assistant-conversations-empty" id="assistant-conversations-empty"
+               {% if conversations %}hidden{% endif %}>No past conversations yet.</p>
+        </div>
+    </aside>
+
+    <button type="button" class="assistant-sidebar-scrim" id="assistant-sidebar-scrim"
+            aria-label="Close conversations" hidden></button>
+
+    <div class="assistant-main">
+        <header class="assistant-header">
+            <div class="assistant-heading">
+                <button type="button" class="assistant-menu-toggle" id="assistant-menu-toggle"
+                        aria-label="Show conversations" aria-controls="assistant-sidebar" aria-expanded="false">
+                    {{ icon('menu') }}
+                </button>
+                <div class="assistant-mark" aria-hidden="true">✦</div>
+                <div>
+                    <p class="assistant-eyebrow">Your career workspace</p>
+                    <h1>Career Assistant</h1>
+                    <p class="assistant-subtitle">Ask about your verified profile, target roles, skills, resume, and interview preparation.</p>
+                </div>
+            </div>
+        </header>
+
+        <div class="assistant-context-bar" id="assistant-context-bar">
+            <span class="assistant-context-dot" aria-hidden="true"></span>
+            <span id="assistant-context-indicator">
+                {% if selected_job_id %}
+                    Selected synchronized job context is active.
+                {% elif pasted_jd %}
+                    Pasted job description context is active.
+                {% elif target_role %}
+                    Target role: {{ target_role }}.
+                {% else %}
+                    No selected job is active; I can still give profile-based general guidance.
+                {% endif %}
+            </span>
+        </div>
+        <p id="assistant-status" class="assistant-status" aria-live="polite" hidden></p>
+        {% if error %}<div class="flash-banner assistant-error"><p>{{ error }}</p></div>{% endif %}
+
+        <section class="chat-shell assistant-chat-shell glass-panel" aria-label="Career Assistant conversation">
+            <div class="chat-messages" id="assistant-messages" aria-live="polite" aria-label="Conversation messages">
+                {% if messages %}
+                    {% for item in messages %}
+                    <div class="chat-bubble {{ 'user' if item.role == 'user' else 'assistant' }}"
+                         {% if item.role != 'user' %}data-markdown-source="{{ item.content }}"{% endif %}>
+                        {{ item.content }}
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    {# One line, not a paragraph: the original ran to five
+                       sentences and pushed the starters and the input below
+                       the fold. #}
+                    <div class="chat-bubble assistant welcome-message">
+                        Grounded in your CareerAI profile — ask anything.
+                    </div>
+                {% endif %}
+                <div class="chat-bubble assistant typing-bubble" id="assistant-typing" hidden aria-label="Career Assistant is typing">
+                    <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
+                </div>
+            </div>
+
+            <div class="assistant-starters glass-panel" id="assistant-starters" {% if messages %}hidden{% endif %}>
+                <div class="assistant-starters-heading">
+                    <h2>What would you like to work on?</h2>
+                    <p>Start with a question. I’ll keep the advice grounded in your CareerAI profile.</p>
+                </div>
+                <h3 class="assistant-starters-title">Starter Questions</h3>
+                <div class="assistant-starter-grid">
+                    <button type="button" class="assistant-starter" data-question="I want to become an AI Engineer. What should I learn next?">
+                        <span class="starter-icon">↗</span><span><strong>AI Engineer learning path</strong><small>Find the next skills to build</small></span>
+                    </button>
+                    <button type="button" class="assistant-starter" data-question="Am I suitable for the selected job?">
+                        <span class="starter-icon">⌁</span><span><strong>Selected job fit</strong><small>Understand your verified match</small></span>
+                    </button>
+                    <button type="button" class="assistant-starter" data-question="What should I improve in my resume?">
+                        <span class="starter-icon">▤</span><span><strong>Resume guidance</strong><small>Make your evidence easier to find</small></span>
+                    </button>
+                    <button type="button" class="assistant-starter" data-question="Help me prepare for an interview.">
+                        <span class="starter-icon">◉</span><span><strong>Interview preparation</strong><small>Practice with your saved context</small></span>
+                    </button>
+                    <button type="button" class="assistant-starter" data-question="What projects should I build for an AI Engineer role?">
+                        <span class="starter-icon">✧</span><span><strong>Project ideas</strong><small>Choose a practical next build</small></span>
+                    </button>
+                </div>
+            </div>
+
+            <form class="assistant-composer" id="assistant-form">
+                <label class="sr-only" for="assistant-question">Ask the Career Assistant</label>
+                <textarea id="assistant-question" name="question" rows="3" maxlength="4000"
+                          placeholder="Ask about your career, skills, job fit, resume, or interview…"></textarea>
+                <div class="assistant-composer-footer">
+                    <span class="assistant-composer-hint">Enter to send · Shift+Enter for a new line</span>
+                    <button class="btn btn-primary assistant-send" id="assistant-send" type="submit">Send <span aria-hidden="true">↑</span></button>
+                </div>
+            </form>
+        </section>
     </div>
-    <p id="assistant-status" class="assistant-status" aria-live="polite" hidden></p>
-    {% if error %}<div class="flash-banner assistant-error"><p>{{ error }}</p></div>{% endif %}
-
-    <section class="chat-shell assistant-chat-shell" aria-label="Career Assistant conversation">
-        <div class="chat-messages" id="assistant-messages" aria-live="polite" aria-label="Conversation messages">
-            {% if messages %}
-                {% for item in messages %}
-                <div class="chat-bubble {{ 'user' if item.role == 'user' else 'assistant' }}"
-                     {% if item.role != 'user' %}data-markdown-source="{{ item.content }}"{% endif %}>
-                    {{ item.content }}
-                </div>
-                {% endfor %}
-            {% else %}
-                <div class="chat-bubble assistant welcome-message">
-                    Hi! I’m your grounded CareerAI assistant. I can help you understand your profile, compare opportunities, build a learning roadmap, improve your resume, and prepare for interviews. I’ll use verified context and tell you when more information is needed.
-                </div>
-            {% endif %}
-            <div class="chat-bubble assistant typing-bubble" id="assistant-typing" hidden aria-label="Career Assistant is typing">
-                <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
-            </div>
-        </div>
-
-        <div class="assistant-starters" id="assistant-starters" {% if messages %}hidden{% endif %}>
-            <div class="assistant-starters-heading">
-                <h2>What would you like to work on?</h2>
-                <p>Start with a question. I’ll keep the advice grounded in your CareerAI profile.</p>
-            </div>
-            <h3 class="assistant-starters-title">Starter Questions</h3>
-            <div class="assistant-starter-grid">
-                <button type="button" class="assistant-starter" data-question="I want to become an AI Engineer. What should I learn next?">
-                    <span class="starter-icon">↗</span><span><strong>AI Engineer learning path</strong><small>Find the next skills to build</small></span>
-                </button>
-                <button type="button" class="assistant-starter" data-question="Am I suitable for the selected job?">
-                    <span class="starter-icon">⌁</span><span><strong>Selected job fit</strong><small>Understand your verified match</small></span>
-                </button>
-                <button type="button" class="assistant-starter" data-question="What should I improve in my resume?">
-                    <span class="starter-icon">▤</span><span><strong>Resume guidance</strong><small>Make your evidence easier to find</small></span>
-                </button>
-                <button type="button" class="assistant-starter" data-question="Help me prepare for an interview.">
-                    <span class="starter-icon">◉</span><span><strong>Interview preparation</strong><small>Practice with your saved context</small></span>
-                </button>
-                <button type="button" class="assistant-starter" data-question="What projects should I build for an AI Engineer role?">
-                    <span class="starter-icon">✧</span><span><strong>Project ideas</strong><small>Choose a practical next build</small></span>
-                </button>
-            </div>
-        </div>
-
-        <form class="assistant-composer" id="assistant-form">
-            <label class="sr-only" for="assistant-question">Ask the Career Assistant</label>
-            <textarea id="assistant-question" name="question" rows="3" maxlength="4000"
-                      placeholder="Ask about your career, skills, job fit, resume, or interview…"></textarea>
-            <div class="assistant-composer-footer">
-                <span class="assistant-composer-hint">Enter to send · Shift+Enter for a new line</span>
-                <button class="btn btn-primary assistant-send" id="assistant-send" type="submit">Send <span aria-hidden="true">↑</span></button>
-            </div>
-        </form>
-    </section>
 </div>
 
 {% endblock %}
@@ -115,7 +157,7 @@
         messages.scrollTop = messages.scrollHeight;
     }
 
-    function addMessage(role, content) {
+    function addMessage(role, content, isStored) {
         const bubble = document.createElement('div');
         bubble.className = `chat-bubble ${role === 'user' ? 'user' : 'assistant'}`;
         if (role === 'assistant') bubble.classList.add('assistant-markdown');
@@ -129,7 +171,7 @@
             bubble.textContent = String(fallbackText === null || fallbackText === undefined ? '' : fallbackText);
         }
         messages.appendChild(bubble);
-        scrollToLatest();
+        if (!isStored) scrollToLatest();
     }
 
     function showStatus(message) {
@@ -193,6 +235,8 @@
             addMessage('assistant', data);
             showStatus('');
             updateContext(data);
+            // The first question names the conversation, so refresh the list.
+            refreshConversations();
         } catch (error) {
             showStatus(error.message || 'The assistant could not answer that question.');
         } finally {
@@ -228,6 +272,7 @@
             starters.hidden = false;
             updateContext(data);
             showStatus('New conversation started.');
+            refreshConversations();
         } catch (error) {
             showStatus(error.message || 'Could not start a new conversation.');
         } finally {
@@ -246,6 +291,222 @@
     question.addEventListener('input', () => {
         if (!question.value.trim()) showStatus('');
     });
+
+    /* ---------------- Conversation sidebar ---------------- */
+    const conversationsEl = document.getElementById('assistant-conversations');
+    const sidebar = document.getElementById('assistant-sidebar');
+    const scrim = document.getElementById('assistant-sidebar-scrim');
+    const menuToggle = document.getElementById('assistant-menu-toggle');
+    const historyUrl = '{{ url_for("assistant.history") }}';
+    const conversationsUrl = '{{ url_for("assistant.conversations") }}';
+
+    function closeSidebar() {
+        if (!sidebar) return;
+        sidebar.classList.remove('is-open');
+        if (scrim) scrim.hidden = true;
+        if (menuToggle) menuToggle.setAttribute('aria-expanded', 'false');
+    }
+
+    if (menuToggle) {
+        menuToggle.addEventListener('click', () => {
+            const open = sidebar.classList.toggle('is-open');
+            if (scrim) scrim.hidden = !open;
+            menuToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+    }
+    if (scrim) scrim.addEventListener('click', closeSidebar);
+
+    function markActiveConversation(id) {
+        document.querySelectorAll('.assistant-conversation').forEach(row => {
+            row.classList.toggle('is-active', row.dataset.sessionId === String(id));
+        });
+    }
+
+    function buildConversationRow(item) {
+        const row = document.createElement('div');
+        row.className = 'assistant-conversation';
+        row.dataset.sessionId = item.id;
+
+        const open = document.createElement('button');
+        open.type = 'button';
+        open.className = 'assistant-conversation-open';
+        open.dataset.sessionId = item.id;
+        open.title = item.title;
+
+        const title = document.createElement('span');
+        title.className = 'assistant-conversation-title';
+        title.textContent = item.title;
+        const meta = document.createElement('span');
+        meta.className = 'assistant-conversation-meta';
+        meta.textContent = item.message_count + ' message' +
+            (item.message_count === 1 ? '' : 's');
+        open.appendChild(title);
+        open.appendChild(meta);
+
+        const actions = document.createElement('div');
+        actions.className = 'assistant-conversation-actions';
+        const rename = document.createElement('button');
+        rename.type = 'button';
+        rename.className = 'assistant-conversation-rename';
+        rename.dataset.sessionId = item.id;
+        rename.setAttribute('aria-label', 'Rename ' + item.title);
+        rename.textContent = 'Rename';
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'assistant-conversation-delete';
+        remove.dataset.sessionId = item.id;
+        remove.setAttribute('aria-label', 'Delete ' + item.title);
+        remove.textContent = 'Delete';
+        actions.appendChild(rename);
+        actions.appendChild(remove);
+
+        row.appendChild(open);
+        row.appendChild(actions);
+        return row;
+    }
+
+    function renderConversations(items) {
+        if (!conversationsEl) return;
+        const empty = document.getElementById('assistant-conversations-empty');
+        if (empty) empty.hidden = items.length > 0;
+
+        items.forEach(item => {
+            let row = conversationsEl.querySelector(
+                '.assistant-conversation[data-session-id="' + item.id + '"]'
+            );
+            // A conversation started with "New Chat" has no row yet, so it is
+            // inserted rather than only refreshing what is already on screen.
+            if (!row) {
+                row = buildConversationRow(item);
+                conversationsEl.insertBefore(row, conversationsEl.firstChild);
+            }
+            const title = row.querySelector('.assistant-conversation-title');
+            if (title) title.textContent = item.title;
+            const meta = row.querySelector('.assistant-conversation-meta');
+            if (meta) {
+                meta.textContent = item.message_count + ' message' +
+                    (item.message_count === 1 ? '' : 's');
+            }
+            const open = row.querySelector('.assistant-conversation-open');
+            if (open) open.title = item.title;
+            row.classList.toggle('is-active', String(item.id) === String(sessionId));
+        });
+    }
+
+    async function refreshConversations() {
+        try {
+            const response = await fetch(conversationsUrl, {
+                credentials: 'same-origin', headers: { 'Accept': 'application/json' }
+            });
+            if (!response.ok) return;
+            const data = await response.json();
+            if (data && Array.isArray(data.conversations)) renderConversations(data.conversations);
+        } catch (error) {
+            /* The sidebar list is a convenience; the chat still works without it. */
+        }
+    }
+
+    async function openConversation(id) {
+        if (!id || String(id) === String(sessionId)) { closeSidebar(); return; }
+        setBusy(true);
+        showStatus('Loading conversation…');
+        try {
+            const response = await fetch(historyUrl + '?session_id=' + encodeURIComponent(id), {
+                credentials: 'same-origin', headers: { 'Accept': 'application/json' }
+            });
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                throw new Error(data.error || 'That conversation could not be opened.');
+            }
+            sessionId = data.session_id;
+            const context = data.context || {};
+            initialJobId = context.job_id || null;
+            initialTargetRole = context.target_role || '';
+            initialPastedJd = context.pasted_jd || '';
+            messages.querySelectorAll('.chat-bubble:not(.typing-bubble)').forEach(b => b.remove());
+            (data.messages || []).forEach(item => {
+                addMessage(item.role, item.content, true);
+            });
+            starters.hidden = (data.messages || []).length > 0;
+            markActiveConversation(sessionId);
+            updateContext({ context: context });
+            showStatus('Conversation opened.');
+            closeSidebar();
+        } catch (error) {
+            showStatus(error.message || 'That conversation could not be opened.');
+        } finally {
+            setBusy(false);
+            question.focus();
+        }
+    }
+
+    if (conversationsEl) {
+        conversationsEl.addEventListener('click', async event => {
+            const renameBtn = event.target.closest('.assistant-conversation-rename');
+            const deleteBtn = event.target.closest('.assistant-conversation-delete');
+            const openBtn = event.target.closest('.assistant-conversation-open');
+
+            if (renameBtn) {
+                event.stopPropagation();
+                const id = renameBtn.dataset.sessionId;
+                const row = conversationsEl.querySelector(
+                    '.assistant-conversation[data-session-id="' + id + '"]'
+                );
+                const current = row
+                    ? row.querySelector('.assistant-conversation-title').textContent
+                    : '';
+                const title = window.prompt('Conversation title', current || '');
+                if (!title || !title.trim()) return;
+                try {
+                    const response = await fetch(
+                        conversationsUrl + '/' + id + '/title', {
+                            method: 'POST', credentials: 'same-origin',
+                            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ title: title })
+                        });
+                    const data = await response.json();
+                    if (!response.ok || !data.success) throw new Error(data.error || 'Rename failed.');
+                    const titleEl = row.querySelector('.assistant-conversation-title');
+                    if (titleEl) titleEl.textContent = data.title;
+                    showStatus('Conversation renamed.');
+                } catch (error) {
+                    showStatus(error.message || 'The conversation could not be renamed.');
+                }
+                return;
+            }
+
+            if (deleteBtn) {
+                event.stopPropagation();
+                const id = deleteBtn.dataset.sessionId;
+                if (!window.confirm('Delete this conversation and its messages?')) return;
+                try {
+                    const response = await fetch(conversationsUrl + '/' + id, {
+                        method: 'DELETE', credentials: 'same-origin',
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    const data = await response.json();
+                    if (!response.ok || !data.success) throw new Error(data.error || 'Delete failed.');
+                    const row = conversationsEl.querySelector(
+                        '.assistant-conversation[data-session-id="' + id + '"]'
+                    );
+                    if (row) row.remove();
+                    const empty = document.getElementById('assistant-conversations-empty');
+                    if (empty) empty.hidden = !!conversationsEl.querySelector('.assistant-conversation');
+                    if (String(id) === String(sessionId)) {
+                        // The open conversation is gone, so start a fresh one.
+                        reset.click();
+                    }
+                    showStatus('Conversation deleted.');
+                } catch (error) {
+                    showStatus(error.message || 'The conversation could not be deleted.');
+                }
+                return;
+            }
+
+            if (openBtn) openConversation(openBtn.dataset.sessionId);
+        });
+    }
+
     document.querySelectorAll('.chat-bubble.assistant[data-markdown-source]').forEach(bubble => {
         bubble.classList.add('assistant-markdown');
         if (assistantRendering) {

@@ -1,4 +1,5 @@
 {% extends "app_shell.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Opportunities - CareerAI{% endblock %}
 {% block app_content %}
 
@@ -15,143 +16,140 @@
     </p>
 </div>
 
-<div class="dash-card">
-    <div class="opportunity-list">
-        {% for job in jobs %}
-        <div class="opportunity-card">
-            <div class="opportunity-row">
-                <span class="company-badge">{{ job.company[0] | upper }}</span>
-                <div class="opportunity-main">
-                    <p class="opportunity-title">{{ job.title }}</p>
-                    <p class="opportunity-company">{{ job.company }}</p>
-                    <p class="opportunity-meta">
-                        <span>📍 {{ job.location }}</span>
-                        <span>{{ job.job_type }}</span>
-                        {% if job.stipend_or_salary %}<span> {{ job.stipend_or_salary }}</span>{% endif %}
-                        {% if job.application_status %}
-                            <span class="status-badge {{ job.application_status }}">{{ job.application_status.replace('_', ' ') | title }}</span>
-                        {% endif %}
-                    </p>
-                </div>
+{#
+   Search over the existing data. This posts to the same list route with `q`,
+   which `recommend_jobs` already handles -- so ranking, the similarity floor,
+   Skill Fit and every job id come through the unchanged code path. A separate
+   search endpoint would have been a second search system.
+#}
+<form class="opp-search" method="GET" action="{{ url_for('opportunities.list_view') }}"
+      role="search">
+    <label class="sr-only" for="opp-search-input">Search opportunities</label>
+    <span class="opp-search__icon">{{ icon('search', 'icon-sm') }}</span>
+    <input class="opp-search__input" type="search" id="opp-search-input" name="q"
+           value="{{ search_query or '' }}"
+           placeholder="Search by job title, company, skill or keyword&hellip;"
+           autocomplete="off">
+    {% if search_query %}
+    <a class="opp-search__clear ai-btn ai-btn--quiet" href="{{ url_for('opportunities.list_view') }}">Clear</a>
+    {% endif %}
+    <button type="submit" class="ai-btn ai-btn--primary">Search</button>
+</form>
+
+
+<div class="opp-list">
+    {% for job in jobs %}
+    {# Compact card: title, company, location, Skill Fit and View Details.
+       Everything else lives in the expanded region below, which is hidden
+       until View Details is pressed. #}
+    <article class="opp-card" data-opp-card="{{ job.job_id }}">
+
+        <div class="opp-card__head">
+            {# The company badge is the pre-existing logo element, left exactly
+               as it was implemented. #}
+            <span class="company-badge">{{ job.company[0] | upper }}</span>
+
+            <div class="opp-card__main">
+                <h2 class="opp-card__title">{{ job.title }}</h2>
+                <p class="opp-card__company">{{ job.company }}</p>
+                <ul class="opp-card__meta">
+                    {% if job.location %}<li class="opp-card__meta-location">{{ icon('map-pin') }} {{ job.location }}</li>{% endif %}
+                    {% if job.application_status %}
+                    <li>
+                        <span class="status-badge {{ job.application_status }}">{{ job.application_status.replace('_', ' ') | title }}</span>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+
+            {# Fit and the expand control sit together in the card's upper
+               right, where the eye lands first. #}
+            <div class="opp-card__corner">
                 {% if job.match_available %}
                 <span class="match-badge {{ 'mid' if job.match_percent < 70 else '' }} {{ 'low' if job.match_percent < 40 else '' }}"
                       title="Profile Skill Fit based on required and preferred skills; not a probability of getting the job.">
-                    {{ job.match_percent }}% Skill Fit
+                    {{ job.match_percent }}%<small>Skill Fit</small>
                 </span>
                 {% else %}
-                <span class="match-badge low" title="Add skills to your profile to calculate Profile Skill Fit.">
-                    Add skills for fit
-                </span>
-                {% endif %}
-                <button class="opportunity-toggle" onclick="toggleDetail('detail-{{ job.job_id }}')">View Details ▾</button>
-            </div>
-
-            <div class="opportunity-detail" id="detail-{{ job.job_id }}">
-                <h4>Description</h4>
-                <p>{{ job.description }}</p>
-
-                <h4>Why this matches</h4>
-                <ul class="muted">
-                    {% for reason in job.match_reasons %}<li>{{ reason }}</li>{% endfor %}
-                </ul>
-
-                {% if job.match_available %}
-                <p class="muted">
-                    <strong>Profile Skill Fit: {{ job.match_percent }}%</strong> based on required and preferred skills.
-                    This is not an overall probability of getting the job.
-                </p>
+                <span class="match-badge low" title="Add skills to your profile to calculate Profile Skill Fit.">Add skills</span>
                 {% endif %}
 
-                {% if job.responsibilities %}
-                <h4>Responsibilities</h4>
-                <p>{{ job.responsibilities }}</p>
-                {% endif %}
-
-                <div class="opportunity-comparison" aria-label="Profile and job skill comparison">
-                    <section class="comparison-panel comparison-requirements">
-                        <h4>Company Requirements</h4>
-                        <div class="comparison-group">
-                            <span class="comparison-label">Required skills</span>
-                            <div class="skill-pill-row">
-                                {% for s in (job.required_skills or '').split(',') if s.strip() %}
-                                    <span class="skill-pill required">{{ s.strip() }}</span>
-                                {% else %}
-                                    <span class="muted comparison-empty">Not specified</span>
-                                {% endfor %}
-                            </div>
-                        </div>
-                        <div class="comparison-group">
-                            <span class="comparison-label">Preferred skills</span>
-                            <div class="skill-pill-row">
-                                {% for s in (job.preferred_skills or '').split(',') if s.strip() %}
-                                    <span class="skill-pill preferred">{{ s.strip() }}</span>
-                                {% else %}
-                                    <span class="muted comparison-empty">Not specified</span>
-                                {% endfor %}
-                            </div>
-                        </div>
-                    </section>
-
-                    <section class="comparison-panel comparison-profile">
-                        <h4>Your Profile</h4>
-                        <span class="comparison-label">Skills you have / matched skills</span>
-                        <div class="skill-pill-row">
-                            {% for s in job.matched_skills %}<span class="skill-pill have">{{ s }}</span>{% endfor %}
-                            {% for s in job.matched_preferred %}<span class="skill-pill have">{{ s }}</span>{% endfor %}
-                            {% if not job.matched_skills and not job.matched_preferred %}
-                                <span class="muted comparison-empty">No matching skills recorded</span>
-                            {% endif %}
-                        </div>
-                    </section>
-
-                    <section class="comparison-panel comparison-learn">
-                        <h4>Skills to Learn</h4>
-                        <div class="skill-pill-row">
-                            {% for s in job.missing_skills %}<span class="skill-pill missing">{{ s }}</span>{% endfor %}
-                            {% for s in job.missing_preferred %}<span class="skill-pill missing">{{ s }}</span>{% endfor %}
-                            {% if not job.missing_skills and not job.missing_preferred %}
-                                <span class="muted comparison-empty">No missing skills reported</span>
-                            {% endif %}
-                        </div>
-                    </section>
-                </div>
-
-                <h4>Qualifications</h4>
-                <p>{{ job.qualifications }} &middot; Experience: {{ job.experience_required }}</p>
-
-                <div class="opportunity-actions">
-                    <button class="btn btn-outline" onclick="trackApplication({{ job.job_id }}, 'save', this)">
-                        {{ 'Saved ✓' if job.application_status == 'saved' else 'Save' }}
-                    </button>
-                    <button class="btn btn-primary" onclick="trackApplication({{ job.job_id }}, 'apply', this)">
-                        {{ 'Applied ✓' if job.application_status in ('applied','interview','under_review') else 'Apply' }}
-                    </button>
-                    <button type="button" class="btn btn-outline ai-summary-button"
-                            onclick="getAISummary({{ job.job_id }}, this)">
-                        Get AI Summary
-                    </button>
-                    <a class="btn btn-outline" href="{{ url_for('skill_gap.view', job_id=job.job_id, target_role=job.title) }}">Skill Gap</a>
-                    <a class="btn btn-outline" href="{{ url_for('interview.view', job_id=job.job_id, target_role=job.title, target_source='custom') }}">Prepare for Interview</a>
-                    {% if job.apply_link %}
-                    {% endif %}
-                </div>
-                <p id="ai-summary-{{ job.job_id }}" class="muted" aria-live="polite" hidden></p>
+                <button type="button" class="ai-btn ai-btn--job-details opp-card__toggle"
+                        aria-expanded="false"
+                        aria-controls="opp-detail-{{ job.job_id }}"
+                        data-opp-toggle
+                        data-job-id="{{ job.job_id }}"
+                        data-title="{{ job.title or '' }}"
+                        data-company="{{ job.company or '' }}"
+                        data-location="{{ job.location or '' }}"
+                        data-job-type="{{ job.job_type or '' }}"
+                        data-salary="{{ job.stipend_or_salary or '' }}"
+                        data-deadline="{{ job.application_deadline or '' }}"
+                        {# The display key, never published_date directly: for a seeded row that
+                           field holds the import timestamp. #}
+                        data-published="{{ job.display_published_date or '' }}"
+                        data-experience="{{ job.experience_required or '' }}"
+                        data-work-mode="{{ job.work_mode or '' }}"
+                        data-fit="{{ job.match_percent if job.match_available else '' }}"
+                        data-description="{{ job.description or '' }}"
+                        data-responsibilities="{{ job.responsibilities or '' }}"
+                        data-qualifications="{{ job.qualifications or '' }}"
+                        data-required-skills="{{ job.required_skills or '' }}"
+                        data-preferred-skills="{{ job.preferred_skills or '' }}"
+                        {# .get() rather than attribute access: a job can arrive
+                           without match keys when Skill Fit is unavailable. #}
+                        data-matched-skills="{{ ((job.get('matched_skills') or []) + (job.get('matched_preferred') or [])) | join(', ') }}"
+                        data-missing-skills="{{ ((job.get('missing_skills') or []) + (job.get('missing_preferred') or [])) | join(', ') }}"
+                        data-match-reasons="{{ job.get('match_reasons') | tojson }}">
+                    View Details
+                    <span class="opp-card__chevron" aria-hidden="true">&#9662;</span>
+                </button>
             </div>
         </div>
-        {% else %}
-        <p class="muted">No sufficiently relevant opportunities found. Try different skills or search terms.</p>
-        {% endfor %}
+
+        {# Expanded inline. Not a modal and not a navigation: the page stays
+           exactly where it is and the card grows to hold the detail. #}
+        <div class="opp-card__detail" id="opp-detail-{{ job.job_id }}" hidden>
+            <div class="opp-card__detail-inner" data-opp-detail-body></div>
+
+            {# The five existing actions, unchanged in destination and
+               behaviour. They appear only once the card is expanded. #}
+            <div class="opp-card__actions">
+                <button type="button" class="ai-btn ai-btn--primary"
+                        onclick="trackApplication({{ job.job_id }}, 'apply', this)"
+                        data-track-slot="apply-{{ job.job_id }}">
+                    {{ 'Applied ✓' if job.application_status in ('applied','interview','under_review') else 'Apply' }}
+                </button>
+                <button type="button" class="ai-btn ai-btn--ghost"
+                        onclick="trackApplication({{ job.job_id }}, 'save', this)"
+                        data-track-slot="save-{{ job.job_id }}">
+                    {{ 'Saved ✓' if job.application_status == 'saved' else 'Save' }}
+                </button>
+                <button type="button" class="ai-btn ai-btn--quiet ai-summary-button"
+                        onclick="getAISummary({{ job.job_id }}, this)">
+                    Get AI Summary
+                </button>
+                <a class="ai-btn ai-btn--quiet" href="{{ url_for('skill_gap.view', job_id=job.job_id, target_role=job.title) }}">Skill Gap</a>
+                <a class="ai-btn ai-btn--quiet" href="{{ url_for('interview.view', job_id=job.job_id, target_role=job.title, target_source='custom') }}">Prepare for Interview</a>
+            </div>
+        </div>
+
+        <p id="ai-summary-{{ job.job_id }}" class="ai-summary-out" aria-live="polite" hidden></p>
+    </article>
+    {% else %}
+    <div class="ai-card ai-card--alt">
+        <p style="margin:0;color:var(--ai-ink-soft);">No sufficiently relevant opportunities found. Try different skills or search terms.</p>
     </div>
+    {% endfor %}
 </div>
+
+{# No dialog on this page: job details expand inline. The Home Dashboard keeps
+   its own popup, which is a separate include on a separate template. #}
 
 {% endblock %}
 
 {% block scripts %}
 <script>
-function toggleDetail(id) {
-    document.getElementById(id).classList.toggle('open');
-}
-
 async function getAISummary(jobId, btn) {
     if (btn.disabled) return;
 
@@ -191,6 +189,9 @@ async function getAISummary(jobId, btn) {
     }
 }
 
+/* Same /applications/<id>/<action> endpoints as before. The only change is
+   that the clicked button is located by data-track-slot rather than by
+   nth-child, because the action order changed. */
 async function trackApplication(jobId, action, btn) {
     if (btn.disabled) return;
 
@@ -218,14 +219,11 @@ async function trackApplication(jobId, action, btn) {
             throw new Error(data.error || `Request failed with status ${response.status}.`);
         }
 
-        const actions = btn.closest('.opportunity-actions');
-        const saveButton = actions ? actions.querySelector('.btn-outline') : null;
-        const applyButton = actions ? actions.querySelector('.btn-primary') : null;
+        const saveButton = document.querySelector(`[data-track-slot="save-${jobId}"]`);
+        const applyButton = document.querySelector(`[data-track-slot="apply-${jobId}"]`);
         const status = data.status;
 
-        if (saveButton) {
-            saveButton.textContent = status === 'saved' ? 'Saved ✓' : 'Save';
-        }
+        if (saveButton) saveButton.textContent = status === 'saved' ? 'Saved ✓' : 'Save';
         if (applyButton) {
             if (status === 'rejected') {
                 applyButton.textContent = 'Rejected';
@@ -236,11 +234,30 @@ async function trackApplication(jobId, action, btn) {
             }
         }
 
+        // A second card can reference the same job; keep both labels in step.
+        document.querySelectorAll(`[data-track-slot$="-${jobId}"]`).forEach(node => {
+            if (node.dataset.trackSlot.startsWith('save-')) {
+                node.textContent = status === 'saved' ? 'Saved ✓' : 'Save';
+            } else if (node.dataset.trackSlot.startsWith('apply-')) {
+                node.textContent = ['applied', 'interview', 'under_review'].includes(status)
+                    ? 'Applied ✓' : (status === 'rejected' ? 'Rejected' : 'Apply');
+            }
+        });
+
+        // The endpoint's own wording is surfaced verbatim, so a refusal that
+        // preserved an existing status reads as a refusal rather than success.
         if (data.message) {
-            alert(data.message);
+            window.showToast(
+                data.message,
+                status === 'rejected' ? 'error' : 'success'
+            );
         }
     } catch (error) {
-        alert(error.message || 'Something went wrong. Please try again.');
+        // A failed request is always shown as an error, never as a success.
+        window.showToast(
+            error.message || 'Something went wrong. Please try again.',
+            'error'
+        );
     } finally {
         btn.disabled = false;
         if (btn.textContent === 'Saving…' || btn.textContent === 'Applying…') {
@@ -248,5 +265,7 @@ async function trackApplication(jobId, action, btn) {
         }
     }
 }
+
 </script>
+<script src="{{ url_for('static', filename='js/opportunity_expand.js') }}"></script>
 {% endblock %}

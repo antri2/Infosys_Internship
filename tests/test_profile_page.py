@@ -130,11 +130,13 @@ def test_profile_page_renders_every_parsed_section(client, parsed):
 def test_profile_page_offers_add_edit_and_delete(client, parsed):
     html = client.get("/profile/").get_data(as_text=True)
 
-    assert "+ Add Education" in html
-    assert "+ Add Experience" in html
-    assert "+ Add Project" in html
-    assert "+ Add Certification" in html
-    assert "+ Add Skills" in html
+    # The "+" is now a leading icon inside the disclosure, so the label text
+    # is asserted without it.
+    assert "Add Education" in html
+    assert "Add Experience" in html
+    assert "Add Project" in html
+    assert "Add Certification" in html
+    assert "Add Skills" in html
     # 2 education + 2 experience + 2 projects + 1 certification = 7 records,
     # each with exactly one Edit and one Delete form.
     assert html.count("/profile/record/delete") == 7

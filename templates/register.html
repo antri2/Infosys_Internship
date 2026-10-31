@@ -1,43 +1,180 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "partials/brand.html" import brand_mark %}
+
+{# Server-side values/errors from a rejected submission. Absent on a first GET,
+   so every lookup falls back to an empty string / no error. #}
+{% set submitted = form_values or {} %}
+{% set errors = field_errors or {} %}
+{% set value_for = submitted.get %}
+
+{% block surface_styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
+{% endblock %}
 {% block title %}Create Your Account - CareerAI{% endblock %}
+{% block body_class %}surface{% endblock %}
+{% block backdrop %}{% include "partials/neural.html" %}{% endblock %}
 {% block content %}
 
-<nav class="navbar">
-    <a href="{{ url_for('landing') }}" class="logo">&#127891; CareerAI</a>
-</nav>
-
-<div class="auth-page">
-    <div class="auth-card">
-        <h1>Create Your Account</h1>
-        <p class="auth-sub">Start your career journey with CareerAI.</p>
-
-        <form method="POST" action="{{ url_for('auth.register') }}">
-            <label for="name">Name</label>
-            <input type="text" id="name" name="name" required autocomplete="name">
-
-            <label for="email">Email</label>
-            <input type="email" id="email" name="email" required autocomplete="email">
-
-            <label for="phone">Phone Number</label>
-            <input type="tel" id="phone" name="phone" autocomplete="tel">
-
-            <label for="password">Password</label>
-            <input type="password" id="password" name="password" required minlength="6" autocomplete="new-password">
-
-            <label for="confirm_password">Confirm Password</label>
-            <input type="password" id="confirm_password" name="confirm_password" required minlength="6" autocomplete="new-password">
-
-            <label>I am:</label>
-            <div class="radio-row">
-                <label class="radio-option"><input type="radio" name="career_status" value="Fresher" checked> Fresher</label>
-                <label class="radio-option"><input type="radio" name="career_status" value="Experienced"> Experienced</label>
+<div class="sc-shell">
+    <header class="sc-nav">
+        <div class="sc-container sc-nav__inner">
+            <a href="{{ url_for('landing') }}" class="sc-brand">
+                {{ brand_mark() }}
+                <span>CareerAI</span>
+            </a>
+            <div class="sc-nav__actions">
+                <a href="{{ url_for('auth.login') }}" class="sc-btn sc-btn--ghost">Login</a>
             </div>
+        </div>
+    </header>
 
-            <button type="submit" class="btn btn-primary btn-block">Register</button>
-        </form>
+    <main class="sc-auth">
+        <div class="sc-auth__grid">
 
-        <p class="auth-switch">Already have an account? <a href="{{ url_for('auth.login') }}">Login here</a></p>
-    </div>
+            <aside class="sc-auth__aside">
+                <h2>One account, a full career plan</h2>
+                <p>
+                    CareerAI reads one resume and builds everything else from it: matched
+                    opportunities, skill gaps, tailored documents and interview practice.
+                </p>
+                <ul class="sc-auth__points">
+                    <li>{{ icon('file-text') }} Upload a PDF or DOCX &mdash; no retyping</li>
+                    <li>{{ icon('shield-check') }} Review and correct everything before it is used</li>
+                    <li>{{ icon('sparkles') }} Recommendations update as your profile does</li>
+                </ul>
+            </aside>
+
+            <div class="sc-auth__card{% if errors %} has-errors{% endif %}">
+                <a href="{{ url_for('landing') }}" class="sc-auth__brand">
+                    {{ brand_mark() }}
+                    <span>CareerAI</span>
+                </a>
+
+                <h1 class="sc-auth__title">Create your account</h1>
+                <p class="sc-auth__sub">Takes about a minute. Next step is your resume.</p>
+
+                <form method="POST" action="{{ url_for('auth.register') }}"
+                      novalidate data-auth-form data-register-form>
+
+                    {# A field the server rejected renders already flagged, so the
+                       message is visible without waiting for the JS to run. #}
+                    <div class="sc-field{% if errors.get('name') %} is-invalid{% endif %}">
+                        <label class="sc-field__label" for="name">Full name</label>
+                        <input type="text" id="name" name="name" required
+                               autocomplete="name" maxlength="255"
+                               placeholder="Your full name"
+                               value="{{ value_for('name', '') }}"
+                               {% if errors.get('name') %}aria-invalid="true"{% endif %}>
+                        <p class="sc-field__error" id="name-error" role="alert">{{ errors.get('name', '') }}</p>
+                    </div>
+
+                    <div class="sc-field{% if errors.get('email') %} is-invalid{% endif %}">
+                        <label class="sc-field__label" for="email">Email address</label>
+                        <input type="email" id="email" name="email" required
+                               autocomplete="email" inputmode="email"
+                               placeholder="you@example.com"
+                               value="{{ value_for('email', '') }}"
+                               {% if errors.get('email') %}aria-invalid="true"{% endif %}>
+                        <p class="sc-field__error" id="email-error" role="alert">{{ errors.get('email', '') }}</p>
+                    </div>
+
+                    {# Exactly ten digits, enforced in the browser and again by
+                       routes/auth.py. inputmode="numeric" raises the numeric pad
+                       on mobile without blocking a pasted value. #}
+                    <div class="sc-field{% if errors.get('phone') %} is-invalid{% endif %}">
+                        <label class="sc-field__label" for="phone">Phone number <span style="font-weight:500;color:var(--sc-text-muted);">(optional)</span></label>
+                        <input type="tel" id="phone" name="phone" autocomplete="tel-national"
+                               inputmode="numeric" placeholder="10 digits, no country code"
+                               maxlength="10" pattern="[0-9]{10}"
+                               data-phone-input value="{{ value_for('phone', '') }}"
+                               {% if errors.get('phone') %}aria-invalid="true"{% endif %}>
+                        <p class="sc-field__hint">Exactly 10 digits &mdash; digits only.</p>
+                        <p class="sc-field__error" id="phone-error" role="alert">{{ errors.get('phone', '') }}</p>
+                    </div>
+
+                    <div class="sc-field sc-field--password{% if errors.get('password') %} is-invalid{% endif %}">
+                        <label class="sc-field__label" for="password">Password</label>
+                        <div class="sc-field__control">
+                            <input type="password" id="password" name="password" required
+                                   autocomplete="new-password" placeholder="Create a password"
+                                   minlength="8" data-password-input data-strength-source
+                                   {% if errors.get('password') %}aria-invalid="true"{% endif %}>
+                            <button type="button" class="sc-field__toggle"
+                                    data-password-toggle="password"
+                                    aria-label="Show password" aria-pressed="false">
+                                {{ icon('eye') }}
+                            </button>
+                        </div>
+
+                        {# Strength meter. Starts at level 0 and only rises as
+                           requirements are met, so it never shows "Strong" for
+                           a password the server would still reject. #}
+                        <div class="sc-strength" id="strength" data-level="0">
+                            <div class="sc-strength__track"><div class="sc-strength__bar"></div></div>
+                            <span class="sc-strength__label" id="strength-label" data-level="0">
+                                Password strength: not set
+                            </span>
+                        </div>
+
+                        <ul class="sc-rules" id="password-rules">
+                            <li data-rule="length">At least 8 characters</li>
+                            <li data-rule="upper">One uppercase letter</li>
+                            <li data-rule="lower">One lowercase letter</li>
+                            <li data-rule="digit">One number</li>
+                            <li data-rule="special">One special character</li>
+                        </ul>
+                        <p class="sc-field__error" id="password-error" role="alert">{{ errors.get('password', '') }}</p>
+                    </div>
+
+                    <div class="sc-field sc-field--password{% if errors.get('confirm_password') %} is-invalid{% endif %}">
+                        <label class="sc-field__label" for="confirm_password">Confirm password</label>
+                        <div class="sc-field__control">
+                            <input type="password" id="confirm_password" name="confirm_password"
+                                   required autocomplete="new-password"
+                                   placeholder="Repeat your password"
+                                   data-password-input data-confirm-for="password"
+                                   {% if errors.get('confirm_password') %}aria-invalid="true"{% endif %}>
+                            <button type="button" class="sc-field__toggle"
+                                    data-password-toggle="confirm_password"
+                                    aria-label="Show password" aria-pressed="false">
+                                {{ icon('eye') }}
+                            </button>
+                        </div>
+                        <p class="sc-field__error" id="confirm_password-error" role="alert">{{ errors.get('confirm_password', '') }}</p>
+                    </div>
+
+                    <div class="sc-field">
+                        <span class="sc-field__label" id="career-status-label">I am a</span>
+                        <div class="sc-choices" role="radiogroup" aria-labelledby="career-status-label">
+                            <label class="sc-choice">
+                                <input type="radio" name="career_status" value="Fresher"
+                                       {% if value_for('career_status', 'Fresher') != 'Experienced' %}checked{% endif %}> Fresher
+                            </label>
+                            <label class="sc-choice">
+                                <input type="radio" name="career_status" value="Experienced"
+                                       {% if value_for('career_status', 'Fresher') == 'Experienced' %}checked{% endif %}> Experienced
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="sc-form-foot">
+                        <button type="submit" class="sc-btn sc-btn--primary sc-btn--lg sc-btn--block">
+                            Create account
+                        </button>
+                    </div>
+                </form>
+
+                <p class="sc-alt">
+                    Already registered? <a href="{{ url_for('auth.login') }}" class="sc-link">Login instead</a>
+                </p>
+            </div>
+        </div>
+    </main>
 </div>
 
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/auth_forms.js') }}"></script>
 {% endblock %}

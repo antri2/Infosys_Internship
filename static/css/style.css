@@ -276,10 +276,88 @@ html, body { height: 100%; }
     color: var(--muted); pointer-events: none;
 }
 .topbar-right { display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
-.topbar-bell { color: var(--muted); position: relative; display: inline-flex; }
-.topbar-bell .dot {
-    position: absolute; top: -2px; right: -2px; width: 8px; height: 8px;
-    border-radius: 50%; background: var(--danger); border: 2px solid #fff;
+
+/* ---------- Notification bell + drawer ---------- */
+/* The bell keeps its place in the header. It opens a right-side drawer rather
+   than a floating popup, so long notifications get a full column of space. */
+.topbar-bell {
+    display: inline-flex; align-items: center; position: relative;
+    background: none; border: none; cursor: pointer; padding: 6px;
+    border-radius: 9px; transition: background .15s ease; color: var(--muted);
+}
+.topbar-bell:hover { background: var(--app-bg); }
+.notification-badge {
+    position: absolute; top: -2px; right: -2px; min-width: 17px; height: 17px;
+    padding: 0 4px; border-radius: 9px; background: var(--danger); color: #fff;
+    font-size: 10.5px; font-weight: 700; line-height: 17px; text-align: center;
+    border: 2px solid #fff; box-sizing: content-box;
+}
+.notification-badge.is-hidden { display: none; }
+
+.notification-drawer-backdrop {
+    position: fixed; inset: 0; z-index: 70; background: rgba(10, 22, 45, .38);
+    opacity: 0; transition: opacity .2s ease;
+}
+.notification-drawer-backdrop.is-open { opacity: 1; }
+.notification-drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 71; width: 380px; max-width: 92vw;
+    background: #fff; border-left: 1px solid var(--border); box-shadow: -12px 0 32px rgba(10, 22, 45, .14);
+    display: flex; flex-direction: column;
+    transform: translateX(100%); transition: transform .22s ease;
+}
+.notification-drawer.is-open { transform: translateX(0); }
+.notification-drawer-head {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+    padding: 16px 18px 12px; border-bottom: 1px solid var(--border);
+}
+.notification-drawer-title { font-size: 16px; font-weight: 700; color: var(--ink); margin: 0; }
+.notification-drawer-sub { font-size: 12.5px; color: var(--muted); margin: 3px 0 0; }
+.notification-drawer-close {
+    background: none; border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+    color: var(--muted); font-size: 17px; line-height: 1; padding: 4px 9px;
+}
+.notification-drawer-close:hover { color: var(--ink); border-color: var(--ink); }
+.notification-drawer-toolbar {
+    display: flex; justify-content: flex-end; padding: 8px 18px 0;
+}
+.notification-drawer-body { flex: 1; overflow-y: auto; padding: 10px 12px 18px; }
+body.notification-drawer-open { overflow: hidden; }
+
+.notification-readall {
+    background: none; border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+    font-size: 12px; font-weight: 600; color: var(--primary); padding: 4px 10px;
+}
+.notification-readall:hover { background: var(--app-bg); }
+.notification-item {
+    display: block; padding: 11px 12px; border-radius: 10px; cursor: pointer;
+    border-left: 3px solid transparent; margin-bottom: 6px;
+    transition: background .15s ease;
+}
+.notification-item:hover { background: var(--app-bg); }
+.notification-item:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.notification-item.is-unread { background: var(--app-bg); border-left-color: var(--primary); }
+.notification-item-top {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    margin-bottom: 3px;
+}
+.notification-category {
+    display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .05em;
+    text-transform: uppercase; color: var(--muted);
+}
+.notification-title { margin: 0; font-size: 13.5px; font-weight: 600; color: var(--ink); line-height: 1.4; }
+.notification-body { margin: 5px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.notification-item-foot {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 7px;
+}
+.notification-time { font-size: 11.5px; color: var(--muted); }
+.notification-link { font-size: 12.5px; font-weight: 600; color: var(--primary); text-decoration: none; }
+.notification-link:hover { text-decoration: underline; }
+.notification-empty { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+.notification-empty-state { text-align: center; padding: 34px 18px; }
+.notification-empty-icon { font-size: 30px; display: block; margin-bottom: 8px; }
+.notification-empty-state .notification-empty + .notification-empty { margin-top: 6px; font-size: 12.5px; }
+.notification-unread-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--primary); flex-shrink: 0;
 }
 
 /* ---------- Profile dropdown ---------- */
@@ -496,6 +574,15 @@ html, body { height: 100%; }
     font-size: 12px; color: var(--muted); margin: 5px 0 0; display: flex; gap: 14px; flex-wrap: wrap; align-items: center;
 }
 .opportunity-meta span { display: inline-flex; align-items: center; gap: 4px; }
+/* Posted / Apply-by chips. Same flat chip language as the rest of the meta
+   row, with a muted label so a bare date is never ambiguous. */
+.opportunity-date .opportunity-date-label { color: var(--muted); font-weight: 600; }
+.opportunity-detail-dates {
+    display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0 0 14px;
+    padding: 10px 12px; font-size: 12.5px; color: var(--ink);
+    background: var(--app-bg); border-radius: 9px;
+}
+.opportunity-detail-dates b { color: var(--primary-dark); font-weight: 700; }
 .match-badge {
     background: var(--success-bg); color: var(--success); font-size: 12.5px; font-weight: 700;
     padding: 5px 12px; border-radius: 999px; white-space: nowrap; flex-shrink: 0;
@@ -722,7 +809,70 @@ html, body { height: 100%; }
     position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
     overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
-.assistant-page { max-width: 980px; margin: 0 auto; }
+.assistant-page { max-width: 1180px; margin: 0 auto; }
+
+/* Conversation sidebar + chat: a two-column layout on desktop, with the
+   conversation list collapsing into an overlay below 900px. */
+.assistant-sidebar {
+    width: 264px; flex-shrink: 0; display: flex; flex-direction: column; gap: 12px;
+    padding: 14px; background: #fff; border: 1px solid var(--border);
+    border-radius: 16px; box-shadow: var(--shadow-card);
+}
+.assistant-page { display: flex; gap: 18px; align-items: flex-start; }
+.assistant-main { flex: 1; min-width: 0; }
+.assistant-new-chat { width: 100%; justify-content: center; }
+.assistant-conversations {
+    display: flex; flex-direction: column; gap: 4px; overflow-y: auto;
+    max-height: 62vh; padding-right: 2px;
+}
+.assistant-conversation {
+    border-radius: 10px; border: 1px solid transparent; transition: background .15s ease;
+}
+.assistant-conversation:hover { background: var(--app-bg); }
+.assistant-conversation.is-active { background: var(--app-bg); border-color: var(--primary); }
+.assistant-conversation-open {
+    display: block; width: 100%; text-align: left; background: none; border: none;
+    cursor: pointer; padding: 8px 10px; border-radius: 10px; color: var(--ink);
+}
+.assistant-conversation-title {
+    display: block; font-size: 13px; font-weight: 600; line-height: 1.35;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.assistant-conversation-meta { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+.assistant-conversation-actions {
+    display: flex; gap: 4px; padding: 0 8px 6px; opacity: 0; transition: opacity .15s ease;
+}
+.assistant-conversation:hover .assistant-conversation-actions,
+.assistant-conversation:focus-within .assistant-conversation-actions { opacity: 1; }
+.assistant-conversation-rename, .assistant-conversation-delete {
+    background: none; border: 1px solid var(--border); border-radius: 7px;
+    cursor: pointer; font-size: 11px; font-weight: 600; color: var(--muted); padding: 3px 8px;
+}
+.assistant-conversation-rename:hover { color: var(--primary); border-color: var(--primary); }
+.assistant-conversation-delete:hover { color: var(--danger); border-color: var(--danger); }
+.assistant-conversations-empty { color: var(--muted); font-size: 12.5px; margin: 4px 2px; }
+.assistant-menu-toggle {
+    display: none; background: none; border: 1px solid var(--border); border-radius: 9px;
+    cursor: pointer; padding: 7px; color: var(--muted);
+}
+.assistant-sidebar-scrim {
+    display: none; position: fixed; inset: 0; z-index: 55; background: rgba(10, 22, 45, .38);
+    border: none;
+}
+
+@media (max-width: 900px) {
+    .assistant-page { flex-direction: column; }
+    .assistant-sidebar {
+        position: fixed; top: 0; left: 0; bottom: 0; z-index: 56; width: 84vw; max-width: 300px;
+        border-radius: 0 16px 16px 0; border-left: none; transform: translateX(-102%);
+        transition: transform .2s ease;
+    }
+    .assistant-sidebar.is-open { transform: translateX(0); }
+    .assistant-sidebar-scrim[hidden] { display: none; }
+    .assistant-sidebar-scrim { display: block; }
+    .assistant-menu-toggle { display: inline-flex; }
+}
+
 .assistant-header {
     display: flex; align-items: center; justify-content: space-between; gap: 18px;
     margin-bottom: 14px;
@@ -868,8 +1018,8 @@ html, body { height: 100%; }
 .db-hero {
     position: relative;
     overflow: hidden;
-    margin-bottom: 28px;
-    padding: 54px 48px 50px;         /* a real dashboard header */
+    margin-bottom: 22px;
+    padding: 30px 34px 28px;         /* balanced: content-sized, not a void */
     border: 1px solid #DFE7F7;
     border-radius: 20px;             /* restrained, not decorative */
     background:
@@ -923,13 +1073,13 @@ html, body { height: 100%; }
     border-radius: 999px;
 }
 .db-hero-name {
-    margin: 12px 0 14px;
-    font-size: 38px; line-height: 1.1; font-weight: 800; letter-spacing: -0.022em;
+    margin: 10px 0 8px;
+    font-size: 32px; line-height: 1.12; font-weight: 800; letter-spacing: -0.022em;
     color: #1B2440;
 }
-.db-hero-sub { margin: 0; max-width: 530px; font-size: 15px; line-height: 1.65; color: #5B6785; }
+.db-hero-sub { margin: 0; max-width: 640px; font-size: 14.5px; line-height: 1.6; color: #5B6785; }
 .db-hero-quote {
-    display: inline-block; margin: 24px 0 0; padding: 12px 18px;
+    display: inline-block; margin: 16px 0 0; padding: 10px 16px;
     font-size: 13.5px; font-style: italic; color: #33406B;
     background: rgba(255, 255, 255, .84);
     border: 1px solid #DCE4F7;
@@ -941,7 +1091,7 @@ html, body { height: 100%; }
 /* ---------- Three summary cards ---------- */
 .db-stats {
     display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 20px; margin-bottom: 34px;
+    gap: 16px; margin-bottom: 26px;
 }
 /* Modern system stack -- no webfont dependency. */
 .db-hero, .db-stats, .db-section {
@@ -949,11 +1099,11 @@ html, body { height: 100%; }
                   -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 .db-stat {
-    display: flex; align-items: center; gap: 18px;
-    min-height: 138px;                        /* substantial, not stretched */
-    padding: 26px 28px;
+    display: flex; align-items: center; gap: 14px;
+    min-height: 96px;                         /* content-sized, not stretched */
+    padding: 18px 20px;
     background: #fff;
-    border: 1px solid #E3E8F2; border-radius: 16px;
+    border: 1px solid #E3E8F2; border-radius: 14px;
     box-shadow: 0 2px 10px rgba(27, 36, 64, .04);
     text-decoration: none; color: inherit;
     transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;
@@ -968,7 +1118,7 @@ html, body { height: 100%; }
 }
 .db-stat:focus-visible { outline: 3px solid #DCE3F9; outline-offset: 2px; }
 .db-stat-icon {
-    width: 54px; height: 54px; flex-shrink: 0; border-radius: 15px;
+    width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px;
     display: flex; align-items: center; justify-content: center;
     background: #F1F4FD; color: #4C63D2;
     border: 1px solid #DFE6F8;
@@ -978,14 +1128,14 @@ html, body { height: 100%; }
 .db-stat-lavender .db-stat-icon { background: #F1EFFC; color: #6A5FC4; }
 .db-stat-purple .db-stat-icon { background: #F3F1FC; color: #7A6ACF; }
 .db-stat:hover .db-stat-icon { background: #4C63D2; color: #fff; border-color: #4C63D2; }
-.db-stat-icon .icon { width: 24px; height: 24px; }
-.db-stat-body { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 8px; }
+.db-stat-icon .icon { width: 20px; height: 20px; }
+.db-stat-body { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 4px; }
 .db-stat-label {
-    font-size: 13px; font-weight: 700; letter-spacing: .045em;
+    font-size: 12px; font-weight: 700; letter-spacing: .045em;
     color: #6B7793; text-transform: uppercase;
 }
 .db-stat-value {
-    font-size: 40px; font-weight: 800; line-height: 1; letter-spacing: -0.028em;
+    font-size: 30px; font-weight: 800; line-height: 1; letter-spacing: -0.028em;
     color: #1B2440;
 }
 /* Arrow only -- no "View" / "Open" / "Start" wording on the cards. */
@@ -1063,12 +1213,14 @@ html, body { height: 100%; }
 /* ---------- Recommended opportunities: fixed 4-up grid, Option A ---------- */
 /* align-items: start keeps each card at its own natural height, so expanding
    one card never stretches its row-mates (default `stretch` did). */
-.db-recs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; align-items: start; }
+/* Exactly nine cards in a 3x3 grid on desktop, stepping down to 2 then 1.
+   The breakpoints live in the responsive block at the end of this section. */
+.db-recs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; align-items: stretch; }
 .db-rec {
     display: flex; flex-direction: column;
-    align-self: start;
-    min-height: 214px;
-    padding: 20px 22px 18px;
+    align-self: stretch;                /* every card the same height in a row */
+    min-height: 0;
+    padding: 18px 20px 16px;
     background: linear-gradient(168deg, #FAFBFF 0%, #FFFFFF 58%);
     border: 1px solid #D8E0F2; border-radius: 14px;
     box-shadow: 0 3px 12px rgba(27, 36, 64, .06);
@@ -1080,31 +1232,81 @@ html, body { height: 100%; }
     box-shadow: 0 16px 30px rgba(76, 99, 210, .15);
 }
 .db-rec:focus-visible { outline: 3px solid #DCE3F9; outline-offset: 2px; }
-.db-rec-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.db-rec-top { display: flex; align-items: flex-start; gap: 10px; }
 .db-rec-logo {
-    width: 42px; height: 42px; flex-shrink: 0; border-radius: 12px;
+    width: 40px; height: 40px; flex-shrink: 0; border-radius: 12px;
     display: flex; align-items: center; justify-content: center;
     background: #F1F4FD; color: #4C63D2;
     border: 1px solid #DFE6F8;
-    font-weight: 700; font-size: 16px;
+    font-weight: 700; font-size: 15px;
+}
+.db-rec-logo-text { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 2px; }
+.db-rec-company {
+    font-size: 13px; font-weight: 600; color: #4C63D2;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.db-rec-location {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11.5px; color: #6B7793;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .db-rec-fit {
+    display: inline-flex; flex-direction: column; align-items: center;
     background: #EDF7F0; color: #1B7A3D;
-    font-size: 11.5px; font-weight: 700;
-    padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+    font-size: 12.5px; font-weight: 700; line-height: 1.15;
+    padding: 5px 9px; border-radius: 10px; white-space: nowrap;
 }
+.db-rec-fit small { font-size: 9px; font-weight: 600; opacity: .8; letter-spacing: .04em; }
 .db-rec-fit.mid { background: #FEF4E0; color: #A96A08; }
 .db-rec-fit.low { background: #F1F3F8; color: #5B6785; }
 .db-rec-title {
-    margin: 16px 0 4px; font-size: 15px; font-weight: 700; line-height: 1.38; color: #16203C;
+    margin: 12px 0 10px; font-size: 15px; font-weight: 700; line-height: 1.36; color: #16203C;
 }
-.db-rec-company { margin: 0; font-size: 13px; font-weight: 600; color: #4C63D2; }
-.db-rec-meta {
-    display: flex; flex-wrap: wrap; gap: 5px 14px;
-    list-style: none; margin: 12px 0 0; padding: 0;
-    font-size: 12px; color: #6B7793;
+
+/* Label/value pairs: work mode, employment, salary, dates, experience. */
+.db-rec-facts {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 12px; list-style: none; margin: 0; padding: 12px 0 0;
+    border-top: 1px solid #E4EAF6;
 }
-.db-rec-meta li { display: inline-flex; align-items: center; gap: 4px; }
+.db-rec-facts li { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.db-rec-fact-label {
+    font-size: 10px; font-weight: 700; letter-spacing: .05em;
+    text-transform: uppercase; color: #8A95B0;
+}
+.db-rec-fact-value {
+    font-size: 12.5px; font-weight: 600; color: #2B3557;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.db-rec-skills { margin-top: 12px; }
+.db-rec-skills-label {
+    display: block; font-size: 10px; font-weight: 700; letter-spacing: .05em;
+    text-transform: uppercase; color: #8A95B0; margin-bottom: 6px;
+}
+.db-rec-notprovided { margin: 0; font-size: 12.5px; color: #8A95B0; }
+
+/* Card actions sit at the bottom so they align across a row of cards. */
+.db-rec-actions {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; padding-top: 14px;
+}
+.db-rec-btn { margin-top: 0; flex: 1 1 100%; }
+.db-rec-track {
+    flex: 1 1 0; padding: 9px 12px;
+    font-family: inherit; font-size: 12.5px; font-weight: 700;
+    border-radius: 9px; cursor: pointer;
+    transition: background-color .2s ease, border-color .2s ease, color .2s ease;
+}
+.db-rec-track:disabled { opacity: .7; cursor: default; }
+.db-rec-track-save {
+    color: #3B4FBF; background: #fff; border: 1px solid #D3DCF4;
+}
+.db-rec-track-save:hover:not(:disabled) { background: #F2F5FE; }
+.db-rec-track-apply {
+    color: #fff; background: #4C63D2; border: 1px solid #4C63D2;
+}
+.db-rec-track-apply:hover:not(:disabled) { background: #3B4FBF; border-color: #3B4FBF; }
+.db-rec-track:focus-visible { outline: 3px solid #DCE3F9; outline-offset: 2px; }
 
 /* View Details action -- no arrow glyph anywhere on the job card. */
 .db-rec-btn {
@@ -1158,13 +1360,8 @@ html, body { height: 100%; }
 .db-rec-chip:hover { background: #F2F5FE; border-color: #9FB0E6; color: #2F41A8; }
 
 /* ---------- Responsive: reduce columns, never scroll sideways ---------- */
-@media (max-width: 1240px) {
-    .db-recs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
 @media (max-width: 1180px) {
     .db-tools { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-@media (max-width: 1000px) {
     .db-recs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 1100px) {
@@ -1173,18 +1370,21 @@ html, body { height: 100%; }
     .db-stat-go { align-self: flex-end; }
 }
 @media (max-width: 800px) {
-    .db-hero { padding: 34px 26px 32px; border-radius: 16px; }
-    .db-hero-name { font-size: 30px; }
+    .db-hero { padding: 26px 22px 24px; border-radius: 16px; }
+    .db-hero-name { font-size: 27px; }
     .db-hero-ring, .db-hero-shape-c { display: none; }
     .db-stats { grid-template-columns: 1fr; gap: 14px; }
     .db-tools { grid-template-columns: 1fr; }
 }
+@media (max-width: 760px) {
+    .db-recs { grid-template-columns: minmax(0, 1fr); }
+    .db-rec-facts { grid-template-columns: 1fr; }
+}
 @media (max-width: 560px) {
-    .db-hero-name { font-size: 26px; }
+    .db-hero-name { font-size: 24px; }
     .db-hero-sub { font-size: 14px; }
-    .db-stat-value { font-size: 34px; }
+    .db-stat-value { font-size: 28px; }
     .db-section-head h2 { font-size: 19px; }
-    .db-recs { grid-template-columns: 1fr; }
 }
 
 /* Respect the OS reduced-motion preference. */
